@@ -163,6 +163,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(result)
 
 if __name__ == '__main__':
+    # Change to the directory containing this script so radar.html is served
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     port = int(os.environ.get('PORT', 8080))
     server = HTTPServer(('', port), Handler)
     print(f'Serving at http://localhost:{port}')
