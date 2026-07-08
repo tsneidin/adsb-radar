@@ -2,7 +2,7 @@
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
-import os, json
+import os, json, time
 
 try:
     import requests
@@ -11,6 +11,9 @@ except ImportError:
 
 PROXY_TARGET = 'https://opendata.adsb.fi'
 WX_HOST = 'www.aviationweather.gov'
+
+# LiveATC feed cache: icao -> (timestamp, feeds_json)
+_liveatc_cache = {}
 
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -73,13 +76,22 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def handle_liveatc(self, icao):
+        global _liveatc_cache
+        now = time.time()
+        # Cache for 1 hour
+        if icao in _liveatc_cache and now - _liveatc_cache[icao][0] < 3600:
+            self.send_json(_liveatc_cache[icao][1])
+            return
+        
         if not requests:
             self.send_json({'feeds': []})
             return
         ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        headers = {'User-Agent': ua}
+        import re
         
         def parse_pls(text):
-            feeds = []
+            result = []
             files, titles = {}, {}
             for line in text.split('\n'):
                 line = line.strip()
@@ -98,29 +110,57 @@ class Handler(SimpleHTTPRequestHandler):
                 name = titles.get(idx, '')
                 sid = url_val.rsplit('/', 1)[-1].split('?')[0]
                 if sid:
-                    feeds.append({'label': name, 'streamId': sid})
-            return feeds
+                    result.append({'label': name, 'streamId': sid})
+            return result
         
-        def try_pls(mount):
+        all_feeds = []
+        seen = set()
+        
+        # Try direct PLS patterns first
+        for mount in [icao, f'{icao}_twr', f'{icao}_app', f'{icao}_gnd', f'{icao}_dep',
+                      f'{icao}_1', f'{icao}_2', f'{icao}_3', f'{icao}_4',
+                      f'{icao}1_twr', f'{icao}1_gnd', f'{icao}1_app', f'{icao}1_atis',
+                      f'{icao}1_gnd_twr', f'{icao}_gnd_twr']:
             try:
-                r = requests.get(f'https://www.liveatc.net/play/{mount}.pls',
-                                 headers={'User-Agent': ua}, timeout=8)
-                if r.status_code == 200 and 'File1=' in r.text:
-                    return parse_pls(r.text)
+                pr = requests.get(f'https://www.liveatc.net/play/{mount}.pls',
+                                  headers=headers, timeout=5)
+                if pr.status_code == 200 and 'File1=' in pr.text:
+                    for f in parse_pls(pr.text):
+                        if f['streamId'] not in seen:
+                            seen.add(f['streamId'])
+                            all_feeds.append(f)
             except Exception:
                 pass
-            return []
         
-        seen = set()
-        all_feeds = []
-        # Try the bare ICAO code first
-        candidates = [icao, f'{icao}_twr', f'{icao}_app', f'{icao}_gnd', f'{icao}_dep']
-        for mount in candidates:
-            for f in try_pls(mount):
-                if f['streamId'] not in seen:
-                    seen.add(f['streamId'])
-                    all_feeds.append(f)
-        self.send_json({'feeds': all_feeds})
+        # If PLS patterns found nothing useful, try search page
+        if len(all_feeds) <= 1:
+            try:
+                r = requests.get(f'https://www.liveatc.net/search/?icao={icao}',
+                                 headers=headers, timeout=10)
+                if r.status_code == 200:
+                    mounts = re.findall(r'play/([a-z0-9_]+)\.pls', r.text)
+                    for mount in mounts:
+                        if mount not in seen:
+                            seen.add(mount)
+                            try:
+                                pr = requests.get(f'https://www.liveatc.net/play/{mount}.pls',
+                                                  headers=headers, timeout=5)
+                                if pr.status_code == 200 and 'File1=' in pr.text:
+                                    for line in pr.text.split('\n'):
+                                        line = line.strip()
+                                        if line.startswith('Title'):
+                                            parts = line.split('=', 1)
+                                            if len(parts) == 2:
+                                                all_feeds.append({'label': parts[1].strip(), 'streamId': mount})
+                                                break
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+        
+        result = {'feeds': all_feeds}
+        _liveatc_cache[icao] = (now, result)
+        self.send_json(result)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))

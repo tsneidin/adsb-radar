@@ -1042,13 +1042,6 @@ canvas.addEventListener('click',e=>{
   const r=canvas.getBoundingClientRect();
   const px=(e.clientX-r.left)/r.width*S.w;
   const py=(e.clientY-r.top)/r.height*S.h;
-  let best=null, bestD=16;
-  for(const ac of S.aircraft){
-    const p=toScreen(ac.lat,ac.lon);
-    const d=Math.hypot(p.x-px,p.y-py);
-    if(d<bestD){bestD=d;best=ac}
-  }
-  if(best){S.selected=best;S.selectedAirport=null;showTargetInfo(best);updList();return}
   if(S.showAirports){
     for(const ap of S.airports){
       const p=toScreen(ap.lat,ap.lon);
@@ -1060,6 +1053,13 @@ canvas.addEventListener('click',e=>{
       }
     }
   }
+  let best=null, bestD=16;
+  for(const ac of S.aircraft){
+    const p=toScreen(ac.lat,ac.lon);
+    const d=Math.hypot(p.x-px,p.y-py);
+    if(d<bestD){bestD=d;best=ac}
+  }
+  if(best){S.selected=best;S.selectedAirport=null;showTargetInfo(best);updList();return}
   hideTargetInfo();
 });
 
