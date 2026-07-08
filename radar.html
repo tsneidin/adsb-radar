@@ -37,7 +37,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 #src-indicator.live{background:#003311;color:#00ff33;border:1px solid #00ff33}
 #src-indicator.err{background:#330000;color:#ff4444;border:1px solid #ff4444}
 #tile-status{font-size:10px;color:#008822;text-transform:none;letter-spacing:0}
-#target-info{position:absolute;top:52px;left:12px;z-index:4;background:rgba(0,12,0,0.88);border:1px solid rgba(0,255,51,0.2);padding:10px 12px;font-size:11px;line-height:1.7;display:none;min-width:190px;max-width:280px;pointer-events:auto;text-shadow:none}
+#target-info{background:rgba(0,12,0,0.6);border:1px solid rgba(0,255,51,0.15);border-radius:3px;padding:6px 10px;font-size:11px;line-height:1.6;display:none;margin-top:4px;flex-shrink:0;overflow-y:auto;max-height:35%}
 #target-info.show{display:block}
 #target-info .close{float:right;cursor:pointer;opacity:0.55;font-size:14px;line-height:1;margin:-2px -2px 0 0}
 #target-info .close:hover{opacity:0.7}
@@ -51,7 +51,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 </head>
 <body>
 <div id="app">
-  <div id="radar-wrap"><canvas id="c"></canvas><div id="hud"></div><div id="target-info"></div></div>
+  <div id="radar-wrap"><canvas id="c"></canvas><div id="hud"></div></div>
   <div id="sidebar">
     <div class="grp">
       <h3>Center</h3>
@@ -78,7 +78,8 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
     </div>
     <div class="grp" style="flex:1;display:flex;flex-direction:column;min-height:0">
       <h3>Targets <span id="tgt-count" style="color:#00ff33">0</span></h3>
-      <div id="tgt-list"></div>
+      <div id="tgt-list" style="flex:1;min-height:0"></div>
+      <div id="target-info"></div>
     </div>
       <h3>Status</h3>
       <p style="font-size:10px;opacity:0.7;line-height:1.4">
@@ -190,7 +191,7 @@ const AIRPORT_LIST = Object.keys(AIRPORTS).sort();
 
 // ===== STATE =====
 const S = {
-  sweepDeg:0, rpm:6, maxRange:25,
+  sweepDeg:0, rpm:6, maxRange:25, mr:25,
   dataMode:'live',
   aircraft:[], lastFrame:0,
   lastFetch:-10000, fetching:false, fetchErr:null,
@@ -463,17 +464,22 @@ function drawBg(){
   drawMapTiles(bgCtx);
   drawGeoOverlay(bgCtx);
   const{mr}=S;
-  const rings=mr<=10?[2,4,6,8,10]:mr<=25?[5,10,15,20,25]:[10,20,30,40,50];
+  const r13=Math.round(mr/3), r23=Math.round(mr*2/3); const rings=[r13,r23,mr];
   for(const r of rings){
     const pr=(r/mr)*rad;
     bgCtx.beginPath();
     bgCtx.arc(cx,cy,pr,0,Math.PI*2);
-    bgCtx.strokeStyle=r===rings[rings.length-1]?'rgba(0,255,51,0.2)':'rgba(0,255,51,0.08)';
-    bgCtx.lineWidth=r===rings[rings.length-1]?0.8:0.4;
+    bgCtx.strokeStyle=r===rings[rings.length-1]?'rgba(0,255,51,0.45)':'rgba(0,255,51,0.3)';
+    bgCtx.lineWidth=r===rings[rings.length-1]?1:0.8;
     bgCtx.stroke();
-    bgCtx.fillStyle='rgba(0,255,51,0.12)';
-    bgCtx.font='9px Consolas,Courier New,monospace';
-    bgCtx.fillText(r+'NM',cx+3,cy-pr+9);
+    const ul=-3*Math.PI/4;
+    const tx=cx+(pr+10)*Math.cos(ul), ty=cy+(pr+10)*Math.sin(ul);
+    bgCtx.save(); bgCtx.translate(tx,ty); bgCtx.rotate(ul+Math.PI/2);
+    bgCtx.font='bold 11px Consolas,Courier New,monospace';
+    bgCtx.fillStyle='rgba(0,255,51,0.7)';
+    bgCtx.textAlign='center'; bgCtx.textBaseline='middle';
+    bgCtx.fillText(r+'NM',0,0);
+    bgCtx.restore();
   }
   for(let deg=0;deg<360;deg++){
     const a=toRad(deg)-Math.PI/2;
@@ -647,7 +653,7 @@ rangeBtns.forEach(b=>{
   b.addEventListener('click',()=>{
     rangeBtns.forEach(x=>x.classList.remove('on'));
     b.classList.add('on');
-    S.maxRange=parseInt(b.dataset.r);
+    S.maxRange=S.mr=parseInt(b.dataset.r);
     S.bgDirty=true;
     loadMapTiles();
     S.lastFetch=-10000;fetchData()

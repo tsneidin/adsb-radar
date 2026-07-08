@@ -1,0 +1,2 @@
+# No external dependencies — server.py uses only stdlib modules.
+# This file exists for Render to detect it as a Python project.
