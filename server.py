@@ -2,7 +2,7 @@
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
-import os, json, time
+import os, json, time, csv, io
 
 try:
     import requests
@@ -15,6 +15,31 @@ WX_HOST = 'www.aviationweather.gov'
 # LiveATC feed cache: icao -> (timestamp, feeds_json)
 _liveatc_cache = {}
 _last_search_time = 0
+
+# Airport type cache: icao -> type (large_airport, medium_airport, small_airport, etc)
+_airport_types = {}
+_airport_types_ts = 0
+
+def _load_airport_types():
+    global _airport_types, _airport_types_ts
+    now = time.time()
+    if _airport_types and now - _airport_types_ts < 86400:
+        return
+    try:
+        resp = urlopen('https://davidmegginson.github.io/ourairports-data/airports.csv', timeout=15)
+        text = resp.read().decode('utf-8')
+        reader = csv.DictReader(io.StringIO(text))
+        types = {}
+        for row in reader:
+            icao = (row.get('ident') or '').strip().upper()
+            t = (row.get('type') or '').strip()
+            if icao and t:
+                types[icao] = t
+        _airport_types = types
+        _airport_types_ts = now
+        print(f'Loaded {len(types)} airport types from OurAirports')
+    except Exception as e:
+        print(f'Failed to load airport types: {e}')
 
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -65,6 +90,10 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({'feeds': []})
                 return
             self.handle_liveatc(icao)
+            return
+        if self.path == '/api/airport-types':
+            _load_airport_types()
+            self.send_json(_airport_types)
             return
         super().do_GET()
 
