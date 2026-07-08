@@ -2,12 +2,8 @@
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
-import os, json, time, csv, io
-
-try:
-    import requests
-except ImportError:
-    requests = None
+from urllib.error import HTTPError
+import os, json, time, csv, io, re
 
 PROXY_TARGET = 'https://opendata.adsb.fi'
 WX_HOST = 'www.aviationweather.gov'
@@ -113,12 +109,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(_liveatc_cache[icao][1])
             return
         
-        if not requests:
-            self.send_json({'feeds': []})
-            return
         ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         headers = {'User-Agent': ua}
-        import re
         
         def parse_pls(text):
             result = []
@@ -152,10 +144,11 @@ class Handler(SimpleHTTPRequestHandler):
                       f'{icao}1_twr', f'{icao}1_gnd', f'{icao}1_app', f'{icao}1_atis',
                       f'{icao}1_gnd_twr', f'{icao}_gnd_twr']:
             try:
-                pr = requests.get(f'https://www.liveatc.net/play/{mount}.pls',
-                                  headers=headers, timeout=5)
-                if pr.status_code == 200 and 'File1=' in pr.text:
-                    for f in parse_pls(pr.text):
+                pr = urlopen(Request(f'https://www.liveatc.net/play/{mount}.pls', headers=headers),
+                             timeout=5)
+                body = pr.read().decode('utf-8')
+                if 'File1=' in body:
+                    for f in parse_pls(body):
                         if f['streamId'] not in seen:
                             seen.add(f['streamId'])
                             all_feeds.append(f)
@@ -166,26 +159,27 @@ class Handler(SimpleHTTPRequestHandler):
         if _last_search_time + 2.5 < now:
             _last_search_time = now
             try:
-                r = requests.get(f'https://www.liveatc.net/search/?icao={icao}',
-                                 headers=headers, timeout=10)
-                if r.status_code == 200:
-                    mounts = re.findall(r'play/([a-z0-9_]+)\.pls', r.text)
-                    for mount in mounts:
-                        if mount not in seen:
-                            seen.add(mount)
-                            try:
-                                pr = requests.get(f'https://www.liveatc.net/play/{mount}.pls',
-                                                  headers=headers, timeout=5)
-                                if pr.status_code == 200 and 'File1=' in pr.text:
-                                    for line in pr.text.split('\n'):
-                                        line = line.strip()
-                                        if line.startswith('Title'):
-                                            parts = line.split('=', 1)
-                                            if len(parts) == 2:
-                                                all_feeds.append({'label': parts[1].strip(), 'streamId': mount})
-                                                break
-                            except Exception:
-                                pass
+                r = urlopen(Request(f'https://www.liveatc.net/search/?icao={icao}', headers=headers),
+                            timeout=10)
+                body = r.read().decode('utf-8')
+                mounts = re.findall(r'play/([a-z0-9_]+)\.pls', body)
+                for mount in mounts:
+                    if mount not in seen:
+                        seen.add(mount)
+                        try:
+                            pr = urlopen(Request(f'https://www.liveatc.net/play/{mount}.pls', headers=headers),
+                                         timeout=5)
+                            pbody = pr.read().decode('utf-8')
+                            if 'File1=' in pbody:
+                                for line in pbody.split('\n'):
+                                    line = line.strip()
+                                    if line.startswith('Title'):
+                                        parts = line.split('=', 1)
+                                        if len(parts) == 2:
+                                            all_feeds.append({'label': parts[1].strip(), 'streamId': mount})
+                                            break
+                        except Exception:
+                            pass
             except Exception:
                 pass
         

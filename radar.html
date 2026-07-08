@@ -122,6 +122,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       <div style="display:flex;gap:4px;margin-top:3px">
         <button id="map-vfr" class="small on">VFR</button>
         <button id="map-osm" class="small">OSM</button>
+        <button id="wx-radar-toggle" class="small">WX</button>
       </div>
       <div style="margin-bottom:10px"></div>
       <h3>Map Opacity <span id="map-opacity-val">10%</span></h3>
@@ -177,6 +178,7 @@ const mapOpacitySlider = document.getElementById('map-opacity-slider');
 const mapOpacityVal = document.getElementById('map-opacity-val');
 const mapVfr = document.getElementById('map-vfr');
 const mapOsm = document.getElementById('map-osm');
+const wxRadarToggle = document.getElementById('wx-radar-toggle');
 const aptInput = document.getElementById('apt-input');
 const aptGo = document.getElementById('apt-go');
 const aptHome = document.getElementById('apt-home');
@@ -417,7 +419,7 @@ function isPublic(icao){
   return false;
 }
 const S = {
-  sweepDeg:0, rpm:5, maxRange:25, mr:25, brightness:1, mapSource:'vfr', mapOpacity:0.1,
+  sweepDeg:0, rpm:5, maxRange:25, mr:25, brightness:1, mapSource:'vfr', mapOpacity:0.1, showWxRadar:false, wxRadarOpacity:0.35, wxRadarTiles:[],
   proxNm:2, proxFt:700,
   airports:[], showAirports:true, wxCache:{}, hoveredAirport:null, selectedAirport:null, lastMetarFetch:0,
   dataMode:'live',
@@ -582,6 +584,29 @@ function loadMapTiles(){
     S.bgDirty=true;
     tileStatus.textContent='';
   },100);
+  if(S.showWxRadar) loadWxRadarTiles();
+}
+
+function loadWxRadarTiles(){
+  const z=tileZoom(), n=1<<z;
+  const rd=S.maxRange/60*1.25;
+  const lr=rd/Math.cos(toRad(S.centerLat));
+  const x0=Math.floor(n*(S.centerLng-lr+180)/360);
+  const x1=Math.floor(n*(S.centerLng+lr+180)/360);
+  const y0=Math.floor(n*(1-Math.log(Math.tan(toRad(S.centerLat+rd))+1/Math.cos(toRad(S.centerLat+rd)))/Math.PI)/2);
+  const y1=Math.floor(n*(1-Math.log(Math.tan(toRad(S.centerLat-rd))+1/Math.cos(toRad(S.centerLat-rd)))/Math.PI)/2);
+  const tiles=[];
+  for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++){
+    const nx=((x%n)+n)%n, ny=n-1-y;
+    const img=new Image();
+    const t={x:nx,y,z,img,ok:false};
+    img.onload=()=>{t.ok=true};
+    img.onerror=()=>{t.ok=false};
+    img.src='https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q/'+z+'/'+nx+'/'+y+'.png';
+    tiles.push(t);
+  }
+  S.wxRadarTiles=tiles;
+  S.bgDirty=true;
 }
 
 function drawMapTiles(c){
@@ -607,6 +632,25 @@ function drawMapTiles(c){
   c.filter='none';
   c.fillStyle=`rgba(${TC.overlayRGB},${overlayA})`;
   c.fillRect(0,0,S.w,S.h);
+}
+
+function drawWxRadarTiles(c){
+  if(!S.wxRadarTiles||!S.wxRadarTiles.length) return;
+  const n=1<<tileZoom();
+  let any=false;
+  for(const t of S.wxRadarTiles) if(t.img.complete&&t.ok){any=true;break}
+  if(!any) return;
+  c.globalAlpha=S.wxRadarOpacity;
+  for(const t of S.wxRadarTiles){
+    if(!t.img.complete||!t.ok) continue;
+    const lon0=t.x/n*360-180, lon1=(t.x+1)/n*360-180;
+    const lat1=toDeg(Math.atan(Math.sinh(Math.PI*(1-2*t.y/n))));
+    const lat0=toDeg(Math.atan(Math.sinh(Math.PI*(1-2*(t.y+1)/n))));
+    const nw=toScreen(lat1,lon0), se=toScreen(lat0,lon1);
+    const dw=se.x-nw.x, dh=se.y-nw.y;
+    if(dw>0&&dh>0) c.drawImage(t.img,nw.x,nw.y,dw,dh);
+  }
+  c.globalAlpha=1;
 }
 
 // ===== AIRPORT / GEO OVERLAY =====
@@ -797,6 +841,7 @@ function drawBg(){
   bgCtx.arc(cx,cy,rad+2,0,Math.PI*2);
   bgCtx.clip();
   drawMapTiles(bgCtx);
+  if(S.showWxRadar) drawWxRadarTiles(bgCtx);
   drawGeoOverlay(bgCtx);
   const{mr}=S;
   const r13=Math.round(mr/3), r23=Math.round(mr*2/3); const rings=[r13,r23,mr];
@@ -1062,6 +1107,12 @@ function setMapSource(src){
 }
 mapVfr.addEventListener('click',()=>setMapSource('vfr'));
 mapOsm.addEventListener('click',()=>setMapSource('osm'));
+wxRadarToggle.addEventListener('click',()=>{
+  S.showWxRadar=!S.showWxRadar;
+  wxRadarToggle.classList.toggle('on',S.showWxRadar);
+  if(S.showWxRadar) loadWxRadarTiles();
+  else S.bgDirty=true;
+});
 
 document.querySelectorAll('[data-theme-btn]').forEach(btn=>{
   btn.addEventListener('click',()=>applyTheme(btn.dataset.themeBtn));
