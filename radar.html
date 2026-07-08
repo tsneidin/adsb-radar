@@ -38,16 +38,17 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 #tgt-list tr.sel td{background:#002a00;color:#00ff33}
 #tgt-list tr{cursor:pointer}
 #tgt-list .empty{color:#007733;font-size:12px;padding:16px 0;text-align:center}
-#src-indicator{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;letter-spacing:1px;margin-left:4px}
-#src-indicator.live{background:#003311;color:#00ff33;border:1px solid #00ff33}
-#src-indicator.err{background:#330000;color:#ff4444;border:1px solid #ff4444}
 #tile-status{font-size:10px;color:#008822;text-transform:none;letter-spacing:0}
-#target-info{background:rgba(0,12,0,0.6);border:1px solid rgba(0,255,51,0.15);border-radius:3px;padding:6px 10px;font-size:11px;line-height:1.6;display:none;margin-top:4px;flex-shrink:0;overflow-y:auto;max-height:35%}
+#target-info{background:rgba(0,12,0,0.6);border:1px solid rgba(0,255,51,0.15);border-radius:3px;padding:6px 10px;font-size:11px;line-height:1.6;display:none;margin-top:4px;flex-shrink:0;overflow-y:auto;max-height:45%}
 #target-info.show{display:block}
 #target-info .close{float:right;cursor:pointer;opacity:0.55;font-size:14px;line-height:1;margin:-2px -2px 0 0}
 #target-info .close:hover{opacity:0.7}
 #target-info .l{opacity:0.82}
 #target-info .v{float:right}
+#target-info audio{width:100%;height:28px;margin:2px 0}
+#target-info .atc-btn{display:block;width:100%;padding:4px;margin:2px 0;background:#001a00;border:1px solid #002a11;color:#00bb33;font:inherit;font-size:10px;cursor:pointer;border-radius:3px;text-align:left}
+#target-info .atc-btn:hover{background:#002a00;border-color:#006622;color:#00dd44}
+#target-info .atc-btn.playing{background:#003311;border-color:#00ff33}
 #wx-popup{display:none;position:absolute;z-index:5;background:rgba(0,12,0,0.92);border:1px solid rgba(0,255,51,0.25);border-radius:3px;padding:8px 10px;font-size:10px;line-height:1.5;max-width:340px;pointer-events:none}
 #wx-popup.show{display:block}
 #wx-popup .h{color:#00ff33;font-weight:bold;margin-bottom:3px}
@@ -86,6 +87,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       <input type="range" id="map-opacity-slider" min="0" max="100" step="5" value="10">
       <div style="display:flex;gap:4px;margin-top:6px">
         <button id="airport-toggle" class="small on">Airports</button>
+        <button id="list-feeds-btn" class="small">LiveATC</button>
       </div>
       <h3 style="margin-top:6px">Collision <span id="prox-nm-val">2 NM</span> <span id="prox-ft-val">700 FT</span></h3>
       <label style="font-size:9px;color:#009922">Horizontal Separation</label>
@@ -102,13 +104,6 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       <div id="tgt-list" style="flex:1;min-height:0"></div>
       <div id="target-info"></div>
     </div>
-      <h3>Status</h3>
-      <p style="font-size:10px;opacity:0.7;line-height:1.4">
-        <span id="conn-status">connecting...</span><br>
-        <a href="#" id="debug-link" style="color:#00cc44">View last JSON</a>
-      </p>
-    </div>
-    <div class="grp" style="margin-top:auto">
   </div>
 </div>
 <script>
@@ -223,6 +218,38 @@ const AIRPORTS = {
   '4WI5':{n:'Apple Grove Airport',lat:43.2127,lon:-89.4849,st:'WI'},
 };
 
+// ===== LIVEAAT CACHE =====
+const liveatcCache = {};
+
+async function getLiveAtcFeeds(icao) {
+  if (liveatcCache[icao]) return liveatcCache[icao];
+  try {
+    const r = await fetch(`/api/liveatc/${icao}`);
+    const d = await r.json();
+    liveatcCache[icao] = d.feeds || [];
+    return liveatcCache[icao];
+  } catch(e) {
+    return [];
+  }
+}
+
+async function showAirportLiveAtc(ap) {
+  const icao = (ap.wxId || ap.icao || '').toLowerCase();
+  if (!icao) return;
+  const feeds = await getLiveAtcFeeds(icao);
+  S.selectedAirport = ap;
+  let h = `<span class="close" onclick="hideTargetInfo()">✕</span><b>${ap.icao} ${ap.name}</b><br>`;
+  if (feeds.length) {
+    for (const f of feeds) {
+      h += `<button class="atc-btn" data-stream="${f.streamId}" onclick="playAtc(this,'${f.streamId}')">▶ ${f.label}</button>`;
+    }
+  } else {
+    h += `<span style="color:#007733;font-size:10px">No LiveATC feeds found</span>`;
+  }
+  infoEl.innerHTML = h + '<div id="atc-player" style="margin-top:2px"></div>';
+  infoEl.classList.add('show');
+}
+
 // ===== AIRPORT DATA LOADER =====
 function parseCsvLine(l){
   const r=[]; let f='', q=false;
@@ -326,10 +353,10 @@ async function fetchScopeWx(){
 const S = {
   sweepDeg:0, rpm:5, maxRange:25, mr:25, brightness:1, mapSource:'vfr', mapOpacity:0.1,
   proxNm:2, proxFt:700,
-  airports:[], showAirports:true, wxCache:{}, hoveredAirport:null, lastMetarFetch:0,
+  airports:[], showAirports:true, wxCache:{}, hoveredAirport:null, selectedAirport:null, lastMetarFetch:0,
   dataMode:'live',
   aircraft:[], lastFrame:0,
-  lastFetch:-10000, fetching:false, fetchErr:null,
+  lastFetch:-10000, fetching:false,
   rateLimitBackoff:0,
   nextId:1, dpr:1,
   w:0, h:0, cx:0, cy:0, rad:0,
@@ -532,7 +559,6 @@ async function fetchLiveData(){
   if(epoch!==_fetchEpoch) return;
   const raw=await r.text();
   const d=JSON.parse(raw);
-  S.lastRawJson=JSON.stringify(d,null,2);
   if(!d.ac||!d.ac.length) throw new Error('empty');
   if(epoch!==_fetchEpoch) return;
   processAircraft(d.ac);
@@ -549,7 +575,7 @@ async function fetchData(){
   S.lastFetch=performance.now();
   try{
     await fetchLiveData();
-    S.fetchErr=null; S.dataMode='live';
+    S.dataMode='live';
     S.rateLimitBackoff=0;
     if(!S.lastMetarFetch||Date.now()-S.lastMetarFetch>300000){fetchScopeWx()}
   }catch(e){
@@ -557,7 +583,6 @@ async function fetchData(){
     if(m.includes('429')||m.includes('403')||m.includes('Too Many')){
       S.rateLimitBackoff=Math.min((S.rateLimitBackoff||1000)*2,60000);
     }
-    S.fetchErr=m;
   }
   S.fetching=false;
 }
@@ -857,8 +882,6 @@ function render(ts){
   ctx.restore();
 
   hudEl.innerHTML=`<span>${new Date().toISOString().slice(11,19)}Z</span>`;
-  const cs=document.getElementById('conn-status');
-  if(cs) cs.textContent=S.fetchErr?'ERR: '+S.fetchErr:'Live';
 }
 
 // ===== CONTROLS =====
@@ -895,6 +918,39 @@ airportToggle.addEventListener('click',()=>{
   S.showAirports=!S.showAirports;
   airportToggle.classList.toggle('on',S.showAirports);
   if(!S.showAirports){S.hoveredAirport=null;wxPopup.classList.remove('show')}
+});
+
+let scanningLiveAtc = false;
+document.getElementById('list-feeds-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('list-feeds-btn');
+  if (scanningLiveAtc) return;
+  scanningLiveAtc = true;
+  btn.textContent = 'Scanning...';
+  const infoEl = document.getElementById('target-info');
+  const aps = S.airports.filter(a => {
+    const p = toScreen(a.lat, a.lon);
+    return p.dist <= S.maxRange;
+  });
+  let h = '<span class="close" onclick="hideTargetInfo()">✕</span><b>LiveATC Feeds in Range</b><br><br>';
+  let found = 0;
+  for (const ap of aps) {
+    const icao = (ap.wxId || ap.icao || '').toLowerCase();
+    if (!icao) continue;
+    const feeds = await getLiveAtcFeeds(icao);
+    if (feeds.length) {
+      found++;
+      h += `<b>${ap.icao}</b> ${ap.name}<br>`;
+      for (const f of feeds) {
+        h += `<button class="atc-btn" data-stream="${f.streamId}" onclick="playAtc(this,'${f.streamId}')">▶ ${f.label}</button>`;
+      }
+      h += '<br>';
+    }
+  }
+  if (!found) h += '<span style="color:#007733">No LiveATC feeds found for airports in range</span>';
+  infoEl.innerHTML = h + '<div id="atc-player" style="margin-top:2px"></div>';
+  infoEl.classList.add('show');
+  btn.textContent = 'LiveATC';
+  scanningLiveAtc = false;
 });
 
 proxNmSlider.addEventListener('input',()=>{
@@ -936,10 +992,7 @@ function updList(){
       `<span class="l">Spd:</span> <span class="v">${Math.round(ac.spd)} KT</span><br>`+
       `<span class="l">Hdg:</span> <span class="v">${Math.round(ac.hdg)}°</span><br>`+
       `<span class="l">Src:</span> <span class="v">${ac.src.toUpperCase()}</span><br>`+
-      `<span class="l">Hex:</span> <span class="v">${ac.hex||'—'}</span><br>`+
-      `<span class="l">Spotted:</span> <span class="v">${ac.spotted||0}x</span>`+
-      `<span class="l">Age:</span> <span class="v">${((performance.now()-ac.lastSeen)/1000).toFixed(1)}s</span><br>`+
-      `<span class="l">Δpos:</span> <span class="v">${ac.history&&ac.history.length?'MOVING ('+ac.history.length+' pts)':'FIXED'}</span>`;
+      `<span class="l">Hex:</span> <span class="v">${ac.hex||'—'}</span><br>`;
     infoEl.classList.add('show');
   }
 }
@@ -958,16 +1011,31 @@ function showTargetInfo(ac){
     `<span class="l">Alt:</span> <span class="v">${altStr(ac.alt)}</span><br>`+
     `<span class="l">Spd:</span> <span class="v">${Math.round(ac.spd)} KT</span><br>`+
     `<span class="l">Hdg:</span> <span class="v">${Math.round(ac.hdg)}°</span><br>`+
-    `<span class="l">Src:</span> <span class="v">${ac.src.toUpperCase()}</span><br>`+
-    `<span class="l">Age:</span> <span class="v">${((performance.now()-ac.lastSeen)/1000).toFixed(1)}s</span><br>`+
-    `<span class="l">Δpos:</span> <span class="v">${ac.history&&ac.history.length?'MOVING ('+ac.history.length+' pts)':'FIXED'}</span>`;
+    `<span class="l">Src:</span> <span class="v">${ac.src.toUpperCase()}</span><br>`;
   infoEl.classList.add('show');
 }
 
 function hideTargetInfo(){
+  const p=document.getElementById('atc-player');
+  if(p){const a=p.querySelector('audio');if(a)a.pause()}
   infoEl.classList.remove('show');
-  S.selected=null;
+  S.selected=null; S.selectedAirport=null;
   updList();
+}
+
+function playAtc(btn,stream){
+  const p=document.getElementById('atc-player');
+  if(!p) return;
+  const wasPlaying=btn.classList.contains('playing');
+  p.innerHTML='';
+  document.querySelectorAll('.atc-btn').forEach(b=>b.classList.remove('playing'));
+  if(wasPlaying) return;
+  btn.classList.add('playing');
+  const a=document.createElement('audio');
+  a.controls=true; a.autoplay=true;
+  a.src='https://d.liveatc.net/'+stream;
+  a.onerror=()=>{a.remove();btn.classList.remove('playing');p.innerHTML='<span style="color:#ff4444;font-size:10px">Stream unavailable</span>'};
+  p.appendChild(a);
 }
 
 canvas.addEventListener('click',e=>{
@@ -980,7 +1048,19 @@ canvas.addEventListener('click',e=>{
     const d=Math.hypot(p.x-px,p.y-py);
     if(d<bestD){bestD=d;best=ac}
   }
-  if(best){S.selected=best;showTargetInfo(best);updList()} else hideTargetInfo();
+  if(best){S.selected=best;S.selectedAirport=null;showTargetInfo(best);updList();return}
+  if(S.showAirports){
+    for(const ap of S.airports){
+      const p=toScreen(ap.lat,ap.lon);
+      if(p.dist>S.maxRange) continue;
+      const d=Math.hypot(p.x-px,p.y-py);
+      if(d<12){
+        showAirportLiveAtc(ap);
+        return;
+      }
+    }
+  }
+  hideTargetInfo();
 });
 
 canvas.addEventListener('mousemove',e=>{
@@ -1023,15 +1103,6 @@ canvas.addEventListener('mousemove',e=>{
     S.hoveredAirport=null;
     wxPopup.classList.remove('show');
   }
-});
-
-// ===== DEBUG =====
-document.getElementById('debug-link').addEventListener('click',e=>{
-  e.preventDefault();
-  if(!S.lastRawJson) return;
-  const w=open('','_blank','width=800,height=600');
-  w.document.write(`<pre style="background:#000;color:#0f0;font:11px monospace;padding:12px;white-space:pre-wrap">${S.lastRawJson}</pre>`);
-  w.document.close();
 });
 
 // ===== MAIN =====
