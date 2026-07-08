@@ -95,10 +95,10 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
         <button id="airport-toggle" class="small on">Airports</button>
         <button id="list-feeds-btn" class="small">LiveATC</button>
       </div>
-      <h3 style="margin-top:6px">Collision <span id="prox-nm-val">2 NM</span> <span id="prox-ft-val">700 FT</span></h3>
-      <label style="font-size:9px;color:#009922">Horizontal Separation</label>
+      <h3 style="margin-top:12px">Collision <span id="prox-nm-val">2 NM</span> <span id="prox-ft-val">700 FT</span></h3>
+      <h3 style="font-size:10px;margin-bottom:2px">Horizontal Separation</h3>
       <input type="range" id="prox-nm-slider" min="0.5" max="10" step="0.5" value="2">
-      <label style="font-size:9px;color:#009922;margin-top:2px">Vertical Separation</label>
+      <h3 style="font-size:10px;margin-top:4px;margin-bottom:2px">Vertical Separation</h3>
       <input type="range" id="prox-ft-slider" min="100" max="2000" step="100" value="700">
     </div>
     <div class="grp">
@@ -455,7 +455,6 @@ function drawMapTiles(c){
   let any=false;
   for(const t of S.mapTiles) if(t.img.complete&&t.ok){any=true;break}
   if(!any) return;
-  const mo=S.mapOpacity, bright=0.12+mo*0.38, overlayA=0.88-mo*0.68;
   c.filter=S.mapSource==='vfr'
     ?`grayscale(1) brightness(${bright}) contrast(1.5)`
     :`grayscale(0.7) brightness(${bright}) contrast(1.2)`;
