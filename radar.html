@@ -140,7 +140,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       <input type="range" id="brightness-slider" min="10" max="100" step="5" value="100">
     </div>
     <div class="grp" style="flex:1;display:flex;flex-direction:column;min-height:0">
-      <h3>Targets <span id="tgt-count">0</span></h3>
+      <h3>Targets <span id="tgt-count">0</span> <button id="labels-toggle" class="small on" style="float:right;padding:1px 4px;font-size:9px">Labels</button></h3>
       <div id="tgt-list" style="flex:1;min-height:0"></div>
       <div id="target-info"></div>
     </div>
@@ -430,6 +430,7 @@ const S = {
   currentAirport:'KMSN',
   mapTiles:null, mapTilesLoading:false,
   bgDirty:true,
+  showAllLabels:true,
   theme:'green-scope',
 };
 
@@ -980,7 +981,7 @@ function render(ts){
     ctx.fillStyle=prox?TC.prox:sel?TC.shadowSel:TC.fg;
     ctx.fillRect(pos.x-sz/2,pos.y-sz/2,sz,sz);
     ctx.restore();
-    if(sel||(al>0.15&&S.brightness>0.1)) labelQueue.push({ac,pos,sel,al,prox});
+    if(S.showAllLabels?(sel||al>0.15):sel) labelQueue.push({ac,pos,sel,al,prox});
   }
   if(labelQueue.length){
     ctx.font='bold 12px Consolas,Courier New,monospace';
@@ -1081,6 +1082,12 @@ airportToggle.addEventListener('click',()=>{
   S.showAirports=!S.showAirports;
   airportToggle.classList.toggle('on',S.showAirports);
   if(!S.showAirports){S.hoveredAirport=null;wxPopup.classList.remove('show')}
+});
+
+const labelsToggle = document.getElementById('labels-toggle');
+labelsToggle.addEventListener('click',()=>{
+  S.showAllLabels=!S.showAllLabels;
+  labelsToggle.classList.toggle('on',S.showAllLabels);
 });
 
 let scanningLiveAtc = false;
