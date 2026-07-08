@@ -49,6 +49,12 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 #target-info .atc-btn{display:block;width:100%;padding:4px;margin:2px 0;background:#001a00;border:1px solid #002a11;color:#00bb33;font:inherit;font-size:10px;cursor:pointer;border-radius:3px;text-align:left}
 #target-info .atc-btn:hover{background:#002a00;border-color:#006622;color:#00dd44}
 #target-info .atc-btn.playing{background:#003311;border-color:#00ff33}
+#target-popup{position:absolute;z-index:6;background:rgba(0,10,0,0.88);border:1px solid #00ff33;border-radius:4px;padding:8px 12px;font-size:11px;line-height:1.7;display:none;pointer-events:auto;min-width:140px;box-shadow:0 4px 20px rgba(0,0,0,0.6)}
+#target-popup.show{display:block}
+#target-popup .close{float:right;cursor:pointer;opacity:0.55;font-size:14px;line-height:1;margin:-2px -2px 0 6px}
+#target-popup .close:hover{opacity:0.7}
+#target-popup .l{opacity:0.7}
+#target-popup .v{float:right;margin-left:12px}
 #wx-popup{display:none;position:absolute;z-index:5;background:rgba(0,12,0,0.92);border:1px solid rgba(0,255,51,0.25);border-radius:3px;padding:8px 10px;font-size:10px;line-height:1.5;max-width:340px;pointer-events:none}
 #wx-popup.show{display:block}
 #wx-popup .h{color:#00ff33;font-weight:bold;margin-bottom:3px}
@@ -62,7 +68,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 </head>
 <body>
 <div id="app">
-  <div id="radar-wrap"><canvas id="c"></canvas><div id="hud"></div></div>
+  <div id="radar-wrap"><canvas id="c"></canvas><div id="hud"></div><div id="target-popup"></div></div>
   <div id="wx-popup"></div>
   <div id="sidebar">
     <div class="grp">
@@ -122,6 +128,7 @@ const bgCtx = bgCanvas.getContext('2d');
 const hudEl = document.getElementById('hud');
 const tgtList = document.getElementById('tgt-list');
 const tgtCount = document.getElementById('tgt-count');
+const popupEl = document.getElementById('target-popup');
 const wxPopup = document.getElementById('wx-popup');
 const airportToggle = document.getElementById('airport-toggle');
 const zoomSlider = document.getElementById('zoom-slider');
@@ -565,6 +572,8 @@ async function fetchLiveData(){
   if(epoch!==_fetchEpoch) return;
   const now=performance.now();
   S.aircraft=S.aircraft.filter(ac=>ac.src!=='live'||(now-ac.lastSeen)<60000);
+  // Auto-hide popup if selected target left scope
+  if(S.selected&&!S.aircraft.includes(S.selected)) hideTargetPopup();
 }
 
 async function fetchData(){
@@ -978,33 +987,17 @@ function updList(){
     el.addEventListener('click',()=>{
       const idx=parseInt(el.dataset.idx);
       const ac=S.aircraft[idx];
-      if(ac){S.selected=ac;showTargetInfo(ac);updList()}
+      if(ac){S.selected=ac;showTargetInfo(ac, canvas.getBoundingClientRect().left+200, canvas.getBoundingClientRect().top+100);updList()}
     });
   });
-  if(S.selected){
-    const ac=S.selected;
-    infoEl.innerHTML=
-      `<span class="close" onclick="hideTargetInfo()">✕</span>`+
-      `<b>${ac.callsign}</b><br>`+
-      `<span class="l">Type:</span> <span class="v">${ac.type||'—'}</span><br>`+
-      `<span class="l">Reg:</span> <span class="v">${ac.reg||'—'}</span><br>`+
-      `<span class="l">Lat:</span> <span class="v">${ac.lat.toFixed(4)}</span><br>`+
-      `<span class="l">Lon:</span> <span class="v">${ac.lon.toFixed(4)}</span><br>`+
-      `<span class="l">Alt:</span> <span class="v">${altStr(ac.alt)}</span><br>`+
-      `<span class="l">Spd:</span> <span class="v">${Math.round(ac.spd)} KT</span><br>`+
-      `<span class="l">Hdg:</span> <span class="v">${Math.round(ac.hdg)}°</span><br>`+
-      `<span class="l">Src:</span> <span class="v">${ac.src.toUpperCase()}</span><br>`+
-      `<span class="l">Hex:</span> <span class="v">${ac.hex||'—'}</span><br>`;
-    infoEl.classList.add('show');
-  }
 }
 
 // ===== TARGET INFO =====
 const infoEl=document.getElementById('target-info');
 
-function showTargetInfo(ac){
-  infoEl.innerHTML=
-    `<span class="close" onclick="hideTargetInfo()">✕</span>`+
+function showTargetInfo(ac, cx, cy){
+  popupEl.innerHTML=
+    `<span class="close" onclick="hideTargetPopup()">✕</span>`+
     `<b>${ac.callsign}</b><br>`+
     `<span class="l">Type:</span> <span class="v">${ac.type||'—'}</span><br>`+
     `<span class="l">Reg:</span> <span class="v">${ac.reg||'—'}</span><br>`+
@@ -1014,7 +1007,27 @@ function showTargetInfo(ac){
     `<span class="l">Spd:</span> <span class="v">${Math.round(ac.spd)} KT</span><br>`+
     `<span class="l">Hdg:</span> <span class="v">${Math.round(ac.hdg)}°</span><br>`+
     `<span class="l">Src:</span> <span class="v">${ac.src.toUpperCase()}</span><br>`;
-  infoEl.classList.add('show');
+  positionPopup(cx, cy);
+  popupEl.classList.add('show');
+}
+
+function positionPopup(cx, cy){
+  const wrap=document.getElementById('radar-wrap');
+  const wr=wrap.getBoundingClientRect();
+  let left=cx-wr.left+10, top=cy-wr.top+10;
+  const pw=200, ph=220;
+  if(left+pw>wr.width) left=wr.width-pw-10;
+  if(left<10) left=10;
+  if(top+ph>wr.height) top=wr.height-ph-10;
+  if(top<10) top=10;
+  popupEl.style.left=left+'px';
+  popupEl.style.top=top+'px';
+}
+
+function hideTargetPopup(){
+  popupEl.classList.remove('show');
+  S.selected=null;
+  updList();
 }
 
 function hideTargetInfo(){
@@ -1061,8 +1074,8 @@ canvas.addEventListener('click',e=>{
     const d=Math.hypot(p.x-px,p.y-py);
     if(d<bestD){bestD=d;best=ac}
   }
-  if(best){S.selected=best;S.selectedAirport=null;showTargetInfo(best);updList();return}
-  hideTargetInfo();
+  if(best){S.selected=best;S.selectedAirport=null;showTargetInfo(best,e.clientX,e.clientY);updList();return}
+  hideTargetPopup();
 });
 
 canvas.addEventListener('mousemove',e=>{
