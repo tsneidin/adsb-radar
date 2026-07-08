@@ -933,9 +933,11 @@ document.getElementById('list-feeds-btn').addEventListener('click', async () => 
   });
   let h = '<span class="close" onclick="hideTargetInfo()">✕</span><b>LiveATC Feeds in Range</b><br><br>';
   let found = 0;
-  for (const ap of aps) {
+  for (let i = 0; i < aps.length; i++) {
+    const ap = aps[i];
     const icao = (ap.wxId || ap.icao || '').toLowerCase();
     if (!icao) continue;
+    if (i > 0) await new Promise(r => setTimeout(r, 500));
     const feeds = await getLiveAtcFeeds(icao);
     if (feeds.length) {
       found++;

@@ -14,6 +14,7 @@ WX_HOST = 'www.aviationweather.gov'
 
 # LiveATC feed cache: icao -> (timestamp, feeds_json)
 _liveatc_cache = {}
+_last_search_time = 0
 
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -76,7 +77,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def handle_liveatc(self, icao):
-        global _liveatc_cache
+        global _liveatc_cache, _last_search_time
         now = time.time()
         # Cache for 1 hour
         if icao in _liveatc_cache and now - _liveatc_cache[icao][0] < 3600:
@@ -116,7 +117,7 @@ class Handler(SimpleHTTPRequestHandler):
         all_feeds = []
         seen = set()
         
-        # Try direct PLS patterns first
+        # Try direct PLS patterns (always works, no rate limiting)
         for mount in [icao, f'{icao}_twr', f'{icao}_app', f'{icao}_gnd', f'{icao}_dep',
                       f'{icao}_1', f'{icao}_2', f'{icao}_3', f'{icao}_4',
                       f'{icao}1_twr', f'{icao}1_gnd', f'{icao}1_app', f'{icao}1_atis',
@@ -132,8 +133,9 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception:
                 pass
         
-        # If PLS patterns found nothing useful, try search page
-        if len(all_feeds) <= 1:
+        # Always try search page with rate limiting (more comprehensive)
+        if _last_search_time + 2.5 < now:
+            _last_search_time = now
             try:
                 r = requests.get(f'https://www.liveatc.net/search/?icao={icao}',
                                  headers=headers, timeout=10)
