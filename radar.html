@@ -257,6 +257,16 @@ async function showAirportLiveAtc(ap) {
   infoEl.classList.add('show');
 }
 
+function autoShowLiveAtc(){
+  const q=S.currentAirport;
+  if(!q) return;
+  const ap=S.airports.find(a=>(a.wxId||a.icao)==q);
+  if(ap){showAirportLiveAtc(ap);return}
+  // Also check AIRPORTS dict for airports not in S.airports (e.g. local DB entries)
+  const a=AIRPORTS[q];
+  if(a) showAirportLiveAtc({icao:q,lat:a.lat,lon:a.lon,name:a.n,wxId:q.length===3&&/^[A-Z]/.test(q)?'K'+q:q});
+}
+
 // ===== AIRPORT DATA LOADER =====
 function parseCsvLine(l){
   const r=[]; let f='', q=false;
@@ -621,6 +631,7 @@ function setCenter(q){
   S.bgDirty=true;
   S.fetching=false;S.aircraft=[];S.lastFetch=-10000;fetchData();
   loadMapTiles();
+  autoShowLiveAtc();
 }
 
 aptGo.addEventListener('click',()=>setCenter(aptInput.value));
@@ -987,7 +998,7 @@ function updList(){
     el.addEventListener('click',()=>{
       const idx=parseInt(el.dataset.idx);
       const ac=S.aircraft[idx];
-      if(ac){S.selected=ac;showTargetInfo(ac, canvas.getBoundingClientRect().left+200, canvas.getBoundingClientRect().top+100);updList()}
+      if(ac){S.selected=ac;const p=toScreen(ac.lat,ac.lon);const r=canvas.getBoundingClientRect();showTargetInfo(ac,r.left+p.x,r.top+p.y);updList()}
     });
   });
 }
@@ -1131,6 +1142,7 @@ function init(){
   loadMapTiles();
   fetchScopeWx();
   centerLabel.textContent='KMSN · Dane County Regional, WI';
+  setTimeout(autoShowLiveAtc, 500);
   loop(0);
 }
 init();
