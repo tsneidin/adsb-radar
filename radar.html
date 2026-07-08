@@ -93,9 +93,8 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       <input type="range" id="map-opacity-slider" min="0" max="100" step="5" value="10">
       <div style="display:flex;gap:4px;margin-top:6px">
         <button id="airport-toggle" class="small on">Airports</button>
-        <button id="list-feeds-btn" class="small">LiveATC</button>
       </div>
-      <h3 style="margin-top:12px">Collision <span id="prox-nm-val">2 NM</span> <span id="prox-ft-val">700 FT</span></h3>
+      <h3 style="margin-top:12px">Collision Detection <span id="prox-nm-val">2 NM</span> <span id="prox-ft-val">700 FT</span></h3>
       <h3 style="font-size:10px;margin-bottom:2px">Horizontal Separation</h3>
       <input type="range" id="prox-nm-slider" min="0.5" max="10" step="0.5" value="2">
       <h3 style="font-size:10px;margin-top:4px;margin-bottom:2px">Vertical Separation</h3>
@@ -940,39 +939,7 @@ airportToggle.addEventListener('click',()=>{
 });
 
 let scanningLiveAtc = false;
-document.getElementById('list-feeds-btn').addEventListener('click', async () => {
-  const btn = document.getElementById('list-feeds-btn');
-  if (scanningLiveAtc) return;
-  scanningLiveAtc = true;
-  btn.textContent = 'Scanning...';
-  const infoEl = document.getElementById('target-info');
-  const aps = S.airports.filter(a => {
-    const p = toScreen(a.lat, a.lon);
-    return p.dist <= S.maxRange;
-  });
-  let h = '<span class="close" onclick="hideTargetInfo()">✕</span><b>LiveATC Feeds in Range</b><br><br>';
-  let found = 0;
-  for (let i = 0; i < aps.length; i++) {
-    const ap = aps[i];
-    const icao = (ap.wxId || ap.icao || '').toLowerCase();
-    if (!icao) continue;
-    if (i > 0) await new Promise(r => setTimeout(r, 500));
-    const feeds = await getLiveAtcFeeds(icao);
-    if (feeds.length) {
-      found++;
-      h += `<b>${ap.icao}</b> ${ap.name}<br>`;
-      for (const f of feeds) {
-        h += `<button class="atc-btn" data-stream="${f.streamId}" onclick="playAtc(this,'${f.streamId}')">▶ ${f.label}</button>`;
-      }
-      h += '<br>';
-    }
-  }
-  if (!found) h += '<span style="color:#007733">No LiveATC feeds found for airports in range</span>';
-  infoEl.innerHTML = h + '<div id="atc-player" style="margin-top:2px"></div>';
-  infoEl.classList.add('show');
-  btn.textContent = 'LiveATC';
-  scanningLiveAtc = false;
-});
+
 
 proxNmSlider.addEventListener('input',()=>{
   S.proxNm=parseFloat(proxNmSlider.value);
