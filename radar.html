@@ -456,8 +456,8 @@ function drawMapTiles(c){
   if(!any) return;
   const mo=S.mapOpacity, bright=0.12+mo*0.38, overlayA=0.88-mo*0.68;
   c.filter=S.mapSource==='vfr'
-    ?`grayscale(1) brightness(${bright}) contrast(1.5)`
-    :`grayscale(0.7) brightness(${bright}) contrast(1.2)`;
+    ?`brightness(${bright}) contrast(1.5)`
+    :`brightness(${bright}) contrast(1.2)`;
   for(const t of S.mapTiles){
     if(!t.img.complete||!t.ok) continue;
     const lon0=t.x/n*360-180, lon1=(t.x+1)/n*360-180;
