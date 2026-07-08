@@ -500,6 +500,26 @@ function applyTheme(name){
 }
 
 // ===== UTILITIES =====
+const STATE_TZ = {
+  'AL':'America/Chicago','AR':'America/Chicago','AZ':'America/Phoenix','CA':'America/Los_Angeles',
+  'CO':'America/Denver','CT':'America/New_York','DC':'America/New_York','DE':'America/New_York',
+  'FL':'America/New_York','GA':'America/New_York','IA':'America/Chicago','ID':'America/Denver',
+  'IL':'America/Chicago','IN':'America/Indianapolis','KS':'America/Chicago','KY':'America/New_York',
+  'LA':'America/Chicago','MA':'America/New_York','MD':'America/New_York','ME':'America/New_York',
+  'MI':'America/Detroit','MN':'America/Chicago','MO':'America/Chicago','MS':'America/Chicago',
+  'MT':'America/Denver','NC':'America/New_York','ND':'America/Chicago','NE':'America/Chicago',
+  'NH':'America/New_York','NJ':'America/New_York','NM':'America/Denver','NV':'America/Los_Angeles',
+  'NY':'America/New_York','OH':'America/New_York','OK':'America/Chicago','OR':'America/Los_Angeles',
+  'PA':'America/New_York','RI':'America/New_York','SC':'America/New_York','SD':'America/Chicago',
+  'TN':'America/Chicago','TX':'America/Chicago','UT':'America/Denver','VA':'America/New_York',
+  'VT':'America/New_York','WA':'America/Los_Angeles','WI':'America/Chicago','WV':'America/New_York',
+  'WY':'America/Denver','AK':'America/Anchorage','HI':'Pacific/Honolulu',
+};
+function tzForAirport(icao){
+  const a=AIRPORTS[icao];
+  if(a&&a.st) return STATE_TZ[a.st];
+  return 'America/New_York';
+}
 function toRad(d){return d*Math.PI/180}
 function toDeg(r){return r*180/Math.PI}
 function normDeg(d){return((d%360)+360)%360}
@@ -1016,7 +1036,11 @@ function render(ts){
   ctx.restore();
   ctx.restore();
 
-  hudEl.innerHTML=`<span>${new Date().toISOString().slice(11,19)}Z</span>`;
+  const now=new Date();
+  const utcTime=now.toISOString().slice(11,19);
+  const tz=tzForAirport(S.currentAirport);
+  const localTime=now.toLocaleString('en-GB',{timeZone:tz,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  hudEl.innerHTML=`<span>${localTime}</span><span>${utcTime}Z</span>`;
 }
 
 // ===== CONTROLS =====
