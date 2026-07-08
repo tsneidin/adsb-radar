@@ -425,7 +425,6 @@ function loadMapTiles(){
   for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++){
     const nx=((x%n)+n)%n, ny=n-1-y;
     const img=new Image();
-    img.referrerPolicy='no-referrer';
     const t={x:nx,y,ny,z,img,ok:false};
     img.onload=()=>{t.ok=true};
     img.onerror=()=>{t.ok=false};
