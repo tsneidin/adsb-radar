@@ -294,7 +294,7 @@ async function showAirportLiveAtc(ap) {
   const feeds = await getLiveAtcFeeds(icao);
   S.selectedAirport = ap;
   const sec=document.getElementById('liveatc-section');
-  let h = `<b>${ap.icao} ${ap.name}</b><br>`;
+  let h = `<b>${ap.icao} Audio</b><br>`;
   if (feeds.length) {
     for (const f of feeds) {
       h += `<button class="atc-btn" data-stream="${f.streamId}" onclick="playAtc(this,'${f.streamId}')">▶ ${f.label}</button>`;
@@ -511,6 +511,8 @@ function applyTheme(name){
   const mo=TC.overlay.match(/rgba\((\d+),(\d+),(\d+),/);
   TC.overlayRGB=mo?`${mo[1]},${mo[2]},${mo[3]}`:'0,20,0';
   TC.overlayRGBinv=mo?`${255-mo[1]},${255-mo[2]},${255-mo[3]}`:'255,235,255';
+  const mapB={'green-scope':0.8,'light':0.6,'dark':0.85}[name];
+  if(mapB!=null){S.mapOpacity=mapB;mapOpacitySlider.value=Math.round(mapB*100);mapOpacityVal.textContent=Math.round(mapB*100)+'%'}
   S.bgDirty=true;
 }
 
