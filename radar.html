@@ -45,7 +45,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #sidebar .grp{border:1px solid var(--border2);border-radius:4px;padding:7px 9px;background:var(--bg3)}
 .grp h3{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--fg4);margin-bottom:4px}
 .ctrl-row{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
-.ctrl-row button{flex:1;min-width:40px;padding:6px 8px;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:12px;cursor:pointer;border-radius:3px;transition:.12s}
+.ctrl-row button{flex:1;min-width:40px;padding:6px 8px;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:12px;cursor:pointer;border-radius:3px;transition:.12s;display:flex;align-items:center;justify-content:center}
 .ctrl-row button:hover{background:var(--border2);border-color:var(--border3);color:var(--fg3)}
 .ctrl-row button.on{background:var(--border);border-color:var(--fg);color:var(--fg);box-shadow:0 0 8px var(--glow2)}
 .ctrl-row button.small{flex:0;padding:4px 8px}
@@ -58,7 +58,7 @@ input[type=range]{width:100%;height:4px;-webkit-appearance:none;appearance:none;
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--fg);cursor:pointer;box-shadow:0 0 8px var(--shadow)}
 input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--fg);cursor:pointer;border:none}
 #center-label{font-size:12px;color:var(--fg)}
-#tgt-list{flex:1;overflow-y:auto;min-height:0;margin-top:1px}
+#tgt-list{flex:1;overflow-y:auto;min-height:60px;margin-top:1px}
 #tgt-list table{width:100%;border-collapse:collapse;font-size:11px}
 #tgt-list th{text-align:left;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.5px;padding:3px 3px 2px;border-bottom:1px solid var(--border2);position:sticky;top:0;background:var(--bg2);font-weight:400}
 #tgt-list td{padding:2px 4px;white-space:nowrap;border-bottom:1px solid var(--border4);color:var(--fg3);font-size:11px}
@@ -66,16 +66,16 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 #tgt-list tr{cursor:pointer}
 #tgt-list .empty{color:var(--fg-muted3);font-size:12px;padding:16px 0;text-align:center}
 #tile-status{font-size:10px;color:var(--fg-muted2);text-transform:none;letter-spacing:0}
-#target-info{background:color-mix(in srgb,var(--bg2) 80%,transparent);border:1px solid var(--glow3);border-radius:3px;padding:6px 10px;font-size:11px;line-height:1.6;display:none;margin-top:4px;flex-shrink:0;overflow-y:auto;max-height:45%}
+#target-info{position:absolute;top:8px;right:8px;z-index:5;background:color-mix(in srgb,var(--bg2) 80%,transparent);border:1px solid var(--glow3);border-radius:3px;padding:6px 10px;font-size:11px;line-height:1.6;display:none;max-height:45%;overflow-y:auto;pointer-events:auto;min-width:160px}
 #target-info.show{display:block}
 #target-info .close{float:right;cursor:pointer;opacity:0.55;font-size:14px;line-height:1;margin:-2px -2px 0 0}
 #target-info .close:hover{opacity:0.7}
 #target-info .l{opacity:0.82}
 #target-info .v{float:right}
 #target-info audio{width:100%;height:28px;margin:2px 0}
-#target-info .atc-btn{display:block;width:100%;padding:4px;margin:2px 0;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:10px;cursor:pointer;border-radius:3px;text-align:left}
-#target-info .atc-btn:hover{background:var(--border2);border-color:var(--border3);color:var(--fg3)}
-#target-info .atc-btn.playing{background:var(--border);border-color:var(--fg)}
+.atc-btn{display:block;width:100%;padding:5px 8px;margin:3px 0;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:12px;cursor:pointer;border-radius:3px;text-align:left}
+.atc-btn:hover{background:var(--border2);border-color:var(--border3);color:var(--fg3)}
+.atc-btn.playing{background:var(--border);border-color:var(--fg)}
 #target-popup{position:absolute;z-index:6;background:color-mix(in srgb,var(--bg) 88%,transparent);border:1px solid var(--fg);border-radius:4px;padding:8px 12px;font-size:11px;line-height:1.7;display:none;pointer-events:auto;min-width:140px;box-shadow:0 4px 20px rgba(0,0,0,0.6)}
 #target-popup.show{display:block}
 #target-popup .close{float:right;cursor:pointer;opacity:0.55;font-size:14px;line-height:1;margin:-2px -2px 0 6px}
@@ -95,7 +95,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 </head>
 <body>
 <div id="app">
-  <div id="radar-wrap"><canvas id="c"></canvas><div id="hud"></div><div id="target-popup"></div></div>
+  <div id="radar-wrap"><canvas id="c"></canvas><div id="hud"></div><div id="target-info"></div><div id="target-popup"></div></div>
   <div id="wx-popup"></div>
   <div id="sidebar">
     <div class="grp">
@@ -114,37 +114,44 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
         <button class="small on" data-theme-btn="green-scope">Green</button>
         <button class="small" data-theme-btn="light">Light</button>
         <button class="small" data-theme-btn="dark">Dark</button>
+        <button id="airport-toggle" class="small on" style="min-width:64px">Disp. Apts</button>
       </div>
     </div>
     <div class="grp">
-      <h3>Range <span id="range-val">25 NM</span></h3>
-      <input type="range" id="zoom-slider" min="15" max="100" step="5" value="25">
-      <div style="display:flex;gap:4px;margin-top:3px">
+      <h3>Map</h3>
+      <div style="display:flex;gap:4px;margin-bottom:8px">
         <button id="map-vfr" class="small on">VFR</button>
         <button id="map-osm" class="small">OSM</button>
         <button id="wx-radar-toggle" class="small">WX</button>
       </div>
-      <div style="margin-bottom:10px"></div>
-      <h3>Map Opacity <span id="map-opacity-val">10%</span></h3>
-      <input type="range" id="map-opacity-slider" min="0" max="100" step="5" value="10">
-      <div style="display:flex;gap:4px;margin-top:6px">
-        <button id="airport-toggle" class="small on">Airports</button>
-      </div>
-      <h3 style="margin-top:12px">Collision Detection</h3>
+      <h3 style="font-size:10px;margin-bottom:2px">Range <span id="range-val">25 NM</span></h3>
+      <input type="range" id="zoom-slider" min="15" max="100" step="5" value="25">
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:8px">Map Brightness <span id="map-opacity-val">10%</span></h3>
+      <input type="range" id="map-opacity-slider" min="0" max="100" step="5" value="10" style="margin-bottom:8px">
+      <h3 style="font-size:10px;margin-bottom:2px">Text Brightness <span id="brightness-val">100%</span></h3>
+      <input type="range" id="brightness-slider" min="10" max="100" step="5" value="100">
+    </div>
+    <div class="grp">
+      <h3>Collision Detection</h3>
       <h3 style="font-size:10px;margin-bottom:2px">Horizontal Separation <span id="prox-nm-val">2 NM</span></h3>
       <input type="range" id="prox-nm-slider" min="0.5" max="10" step="0.5" value="2">
       <h3 style="font-size:10px;margin-top:4px;margin-bottom:2px">Vertical Separation <span id="prox-ft-val">700 FT</span></h3>
       <input type="range" id="prox-ft-slider" min="100" max="2000" step="100" value="700">
     </div>
     <div class="grp">
-      <h3>Brightness <span id="brightness-val">100%</span></h3>
-      <input type="range" id="brightness-slider" min="10" max="100" step="5" value="100">
+      <h3>Filters</h3>
+      <h3 style="font-size:10px;margin-bottom:2px">Max Altitude <span id="alt-flt-val">FL999+</span></h3>
+      <input type="range" id="alt-flt-slider" min="0" max="999" step="10" value="999">
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Min Speed <span id="min-spd-val">0 KT</span></h3>
+      <input type="range" id="min-spd-slider" min="0" max="600" step="10" value="0">
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Squawk Prefix</h3>
+      <input type="text" id="sqk-filter" placeholder="squawk, N#, or callsign" style="width:100%;padding:4px 6px" value="">
     </div>
-    <div class="grp" style="flex:1;display:flex;flex-direction:column;min-height:0">
-      <h3>Targets <span id="tgt-count">0</span> <button id="labels-toggle" class="small on" style="float:right;padding:1px 4px;font-size:9px">Labels</button></h3>
-      <div id="tgt-list" style="flex:1;min-height:0"></div>
-      <div id="target-info"></div>
+<div class="grp" style="flex:none;height:200px;display:flex;flex-direction:column">
+<h3>Targets <span id="tgt-count">0</span> <button id="labels-toggle" class="small on" style="float:right;padding:1px 4px;font-size:9px">Labels</button></h3>
+      <div id="tgt-list" style="flex:1"></div>
     </div>
+    <div id="liveatc-section" class="grp" style="flex:1;overflow-y:auto"></div>
   </div>
 </div>
 <script>
@@ -153,7 +160,7 @@ const NM_PER_DEG = 60;
 const BEAM_DEG = 2.5;
 const DECAY_MS = 15000;
 const API_TIMEOUT = 10000;
-const API_INTERVAL = 3000;
+const API_INTERVAL = 6000;
 
 // ===== DOM =====
 const canvas = document.getElementById('c');
@@ -179,6 +186,11 @@ const mapOpacityVal = document.getElementById('map-opacity-val');
 const mapVfr = document.getElementById('map-vfr');
 const mapOsm = document.getElementById('map-osm');
 const wxRadarToggle = document.getElementById('wx-radar-toggle');
+const altFltSlider = document.getElementById('alt-flt-slider');
+const altFltVal = document.getElementById('alt-flt-val');
+const minSpdSlider = document.getElementById('min-spd-slider');
+const minSpdVal = document.getElementById('min-spd-val');
+const sqkFilter = document.getElementById('sqk-filter');
 const aptInput = document.getElementById('apt-input');
 const aptGo = document.getElementById('apt-go');
 const aptHome = document.getElementById('apt-home');
@@ -281,7 +293,8 @@ async function showAirportLiveAtc(ap) {
   if (!icao) return;
   const feeds = await getLiveAtcFeeds(icao);
   S.selectedAirport = ap;
-  let h = `<span class="close" onclick="hideTargetInfo()">✕</span><b>${ap.icao} ${ap.name}</b><br>`;
+  const sec=document.getElementById('liveatc-section');
+  let h = `<b>${ap.icao} ${ap.name}</b><br>`;
   if (feeds.length) {
     for (const f of feeds) {
       h += `<button class="atc-btn" data-stream="${f.streamId}" onclick="playAtc(this,'${f.streamId}')">▶ ${f.label}</button>`;
@@ -289,8 +302,7 @@ async function showAirportLiveAtc(ap) {
   } else {
     h += `<span style="color:${TC.fg}">No LiveATC feeds found</span>`;
   }
-  infoEl.innerHTML = h + '<div id="atc-player" style="margin-top:2px"></div>';
-  infoEl.classList.add('show');
+  sec.innerHTML = h + '<div id="atc-player" style="margin-top:2px"></div>';
 }
 
 function autoShowLiveAtc(){
@@ -420,7 +432,7 @@ function isPublic(icao){
 }
 const S = {
   sweepDeg:0, rpm:5, maxRange:25, mr:25, brightness:1, mapSource:'vfr', mapOpacity:0.1, showWxRadar:false, wxRadarOpacity:0.35, wxRadarTiles:[],
-  proxNm:2, proxFt:700,
+  proxNm:2, proxFt:700, altFilter:999, minSpd:0, sqkFilter:'',
   airports:[], showAirports:true, wxCache:{}, hoveredAirport:null, selectedAirport:null, lastMetarFetch:0,
   dataMode:'live',
   aircraft:[], lastFrame:0,
@@ -706,9 +718,15 @@ function drawGeoOverlay(c){
 
 // ===== AIRCRAFT =====
 function mkAircraft(cs,lat,lon,alt,hdg,spd,src){
-  return{id:S.nextId++,callsign:cs,lat,lon,alt,hdg,spd,src,type:'',reg:'',lastLit:-DECAY_MS*2,history:[]};
+  return{id:S.nextId++,callsign:cs,lat,lon,alt,hdg,spd,src,type:'',reg:'',squawk:'',lastLit:-DECAY_MS*2,history:[]};
 }
-function altStr(a){
+function aircraftBearing(ac){
+  const h=ac.history;
+  if(h.length>=2){const p=h[h.length-1],pp=h[h.length-2];return Math.atan2(p.lon-pp.lon,p.lat-pp.lat)*180/Math.PI}
+  if(h.length>=1){const p=h[h.length-1];return Math.atan2(ac.lon-p.lon,ac.lat-p.lat)*180/Math.PI}
+  return ac.hdg;
+}
+  function altStr(a){
   if(a>=18000) return'FL'+Math.round(a/1000)+'0';
   return String(Math.round(a/100)).padStart(3,'0');
 }
@@ -730,7 +748,7 @@ function processAircraft(list){
       if(!cs||/^[A-F0-9]{6}$/.test(cs)) cs=a.t||'---';
       ac=mkAircraft(cs,a.lat,a.lon,Math.round(al),Math.round(a.track||0),Math.round(a.gs||0),'live');
       ac.hex=hex; ac.lastSeen=now; ac.spotted=1;
-      ac.type=a.t||''; ac.reg=a.r||'';
+      ac.type=a.t||''; ac.reg=a.r||''; ac.squawk=a.squawk||'';
       S.aircraft.push(ac);
     }else{
       if(Math.abs(ac.lat-a.lat)>1e-6||Math.abs(ac.lon-a.lon)>1e-6){
@@ -741,7 +759,7 @@ function processAircraft(list){
       ac.alt=Math.round(typeof a.alt_baro==='number'?a.alt_baro:(a.alt_geom||35000));
       ac.hdg=Math.round(a.track||0); ac.spd=Math.round(a.gs||0);
       ac.lastSeen=now; ac.spotted=(ac.spotted||0)+1;
-      ac.type=a.t||ac.type; ac.reg=a.r||ac.reg;
+      ac.type=a.t||ac.type; ac.reg=a.r||ac.reg; ac.squawk=a.squawk||ac.squawk||'';
       const ncs=(a.flight||'').trim();
       if(ncs&&!/^[A-F0-9]{6}$/.test(ncs)) ac.callsign=ncs;
     }
@@ -809,7 +827,7 @@ function setCenter(q){
   centerLabel.textContent=q+(apt.st?' · '+apt.n+', '+apt.st:' · '+apt.n);
   aptInput.value=q;
   S.bgDirty=true;
-  S.fetching=false;S.aircraft=[];S.lastFetch=-10000;fetchData();
+  S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,2000);
   loadMapTiles();
   autoShowLiveAtc();
 }
@@ -1008,6 +1026,28 @@ function render(ts){
     }
   }
 
+  // Heading lines
+  for(const ac of S.aircraft){
+    const sel=ac===S.selected;
+    const age=sel?0:(ts-ac.lastLit)/DECAY_MS;
+    if(!sel&&age>3.5) continue;
+    if(ac.hdg==null) continue;
+    const pos=toScreen(ac.lat,ac.lon);
+    if(pos.dist>mr) continue;
+    const hdgLen=Math.min(80,pos.dist*0.4+ac.spd*0.4);
+    if(hdgLen<6) continue;
+    const aH=toRad(ac.hdg)-Math.PI/2;
+    const ex=pos.x+hdgLen*Math.cos(aH), ey=pos.y+hdgLen*Math.sin(aH);
+    ctx.save();
+    ctx.globalAlpha=sel?0.9:0.35*S.brightness;
+    ctx.strokeStyle=sel?TC.light3:TC.dim12;
+    ctx.lineWidth=sel?1.2:0.6;
+    ctx.setLineDash([3,4]);
+    ctx.beginPath();ctx.moveTo(pos.x,pos.y);ctx.lineTo(ex,ey);
+    ctx.stroke();ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   // Blips + labels with collision avoidance
   const labelQueue=[];
   for(const ac of S.aircraft){
@@ -1015,6 +1055,9 @@ function render(ts){
     const sel=ac===S.selected;
     const age=sel?0:(ts-ac.lastLit)/DECAY_MS;
     if(!sel&&age>3.5) continue;
+    if(ac.alt>0&&ac.alt>S.altFilter*100) continue;
+    if(ac.spd<S.minSpd) continue;
+    if(S.sqkFilter){const m=x=>x&&x.startsWith(S.sqkFilter);if(!m(ac.squawk)&&!m(ac.reg)&&!m(ac.callsign)) continue}
     const pos=toScreen(ac.lat,ac.lon);
     if(pos.dist>mr) continue;
     const al=sel?1:Math.max(0.45,1-age);
@@ -1024,7 +1067,17 @@ function render(ts){
     ctx.shadowBlur=sel?24:prox?18:age<0.08?22:10;
     ctx.globalAlpha=(sel?1:Math.min(1,al*1.2))*S.brightness;
     ctx.fillStyle=prox?TC.prox:sel?TC.shadowSel:TC.fg;
-    ctx.fillRect(pos.x-sz/2,pos.y-sz/2,sz,sz);
+    const bearing=aircraftBearing(ac);
+    if(bearing!=null){
+      const aT=Math.PI/180*(bearing-90);
+      ctx.translate(pos.x,pos.y);
+      ctx.rotate(aT);
+      ctx.beginPath();
+      ctx.moveTo(sz*1.1,0);ctx.lineTo(-sz*0.7,-sz*0.7);ctx.lineTo(-sz*0.3,0);ctx.lineTo(-sz*0.7,sz*0.7);
+      ctx.closePath();ctx.fill();
+    }else{
+      ctx.fillRect(pos.x-sz/2,pos.y-sz/2,sz,sz);
+    }
     ctx.restore();
     if(S.showAllLabels?(sel||al>0.15):sel) labelQueue.push({ac,pos,sel,al,prox});
   }
@@ -1129,6 +1182,20 @@ mapOpacitySlider.addEventListener('input',()=>{
   S.bgDirty=true;
 });
 
+altFltSlider.addEventListener('input',()=>{
+  S.altFilter=parseInt(altFltSlider.value);
+  altFltVal.textContent=S.altFilter>=999?'FL999+':'FL'+S.altFilter;
+});
+
+minSpdSlider.addEventListener('input',()=>{
+  S.minSpd=parseInt(minSpdSlider.value);
+  minSpdVal.textContent=S.minSpd+' KT';
+});
+
+sqkFilter.addEventListener('input',()=>{
+  S.sqkFilter=sqkFilter.value.trim().toUpperCase();
+});
+
 airportToggle.addEventListener('click',()=>{
   S.showAirports=!S.showAirports;
   airportToggle.classList.toggle('on',S.showAirports);
@@ -1155,19 +1222,20 @@ proxFtSlider.addEventListener('input',()=>{
 
 // ===== TARGET LIST =====
 function updList(){
-  const s=[...S.aircraft].sort((a,b)=>a.callsign.localeCompare(b.callsign));
+  const s=S.aircraft.filter(a=>a&&a.lat!=null&&typeof a.lat=='number').map(a=>({a,dist:distNm(S.centerLat,S.centerLng,a.lat,a.lon)})).sort((a,b)=>a.dist-b.dist);
   if(!s.length){tgtList.innerHTML='<div class="empty">NO TARGETS</div>';tgtCount.textContent='0';return}
-  const v=s.filter(a=>distNm(S.centerLat,S.centerLng,a.lat,a.lon)<=S.maxRange);
+  const v=s.filter(x=>{if(S.sqkFilter){const m=v=>v&&v.startsWith(S.sqkFilter);if(!m(x.a.squawk)&&!m(x.a.reg)&&!m(x.a.callsign)) return false}return x.dist<=S.maxRange&&x.a.spd>=S.minSpd});
   tgtCount.textContent=v.length;
   if(!v.length){tgtList.innerHTML='<div class="empty">NO TARGETS IN RANGE</div>';return}
   let h='<table><thead><tr><th>C/S</th><th>NM</th><th>°</th><th>ALT</th><th>KT</th><th>HDG</th></tr></thead><tbody>';
-  for(const a of v){const p=toScreen(a.lat,a.lon);const sel=a===S.selected;h+=`<tr class="${sel?'sel':''}" data-idx="${S.aircraft.indexOf(a)}"><td>${a.callsign}</td><td>${p.dist.toFixed(0)}</td><td>${Math.round(p.bearing)}</td><td>${altStr(a.alt)}</td><td>${Math.round(a.spd)}</td><td>${Math.round(a.hdg)}</td></tr>`}
+  for(const el of v){const a=el.a;if(!a)continue;const p=toScreen(a.lat,a.lon);const sel=a===S.selected;h+=`<tr class="${sel?'sel':''}" data-idx="${S.aircraft.indexOf(a)}"><td>${a.callsign}</td><td>${p.dist.toFixed(0)}</td><td>${Math.round(p.bearing)}</td><td>${altStr(a.alt)}</td><td>${Math.round(a.spd)}</td><td>${Math.round(a.hdg)}</td></tr>`}
   tgtList.innerHTML=h+'</tbody></table>';
   tgtList.querySelectorAll('tr[data-idx]').forEach(el=>{
     el.addEventListener('click',()=>{
       const idx=parseInt(el.dataset.idx);
       const ac=S.aircraft[idx];
-      if(ac){S.selected=ac;const p=toScreen(ac.lat,ac.lon);const r=canvas.getBoundingClientRect();showTargetInfo(ac,r.left+p.x,r.top+p.y);updList()}
+      if(ac){S.selected=ac;showTargetInfo(ac);updList()}
+      hideTargetPopup();
     });
   });
 }
@@ -1175,20 +1243,18 @@ function updList(){
 // ===== TARGET INFO =====
 const infoEl=document.getElementById('target-info');
 
-function showTargetInfo(ac, cx, cy){
-  popupEl.innerHTML=
-    `<span class="close" onclick="hideTargetPopup()">✕</span>`+
+function showTargetInfo(ac){
+  popupEl.classList.remove('show');
+  infoEl.innerHTML=`<span class="close" onclick="hideTargetInfo()">✕</span>`+
     `<b>${ac.callsign}</b><br>`+
     `<span class="l">Type:</span> <span class="v">${ac.type||'—'}</span><br>`+
     `<span class="l">Reg:</span> <span class="v">${ac.reg||'—'}</span><br>`+
-    `<span class="l">Lat:</span> <span class="v">${ac.lat.toFixed(4)}</span><br>`+
-    `<span class="l">Lon:</span> <span class="v">${ac.lon.toFixed(4)}</span><br>`+
     `<span class="l">Alt:</span> <span class="v">${altStr(ac.alt)}</span><br>`+
     `<span class="l">Spd:</span> <span class="v">${Math.round(ac.spd)} KT</span><br>`+
     `<span class="l">Hdg:</span> <span class="v">${Math.round(ac.hdg)}°</span><br>`+
-    `<span class="l">Src:</span> <span class="v">${ac.src.toUpperCase()}</span><br>`;
-  positionPopup(cx, cy);
-  popupEl.classList.add('show');
+    `<span class="l">Src:</span> <span class="v">${ac.src.toUpperCase()}</span><br>`+
+    (ac.squawk?`<span class="l">Squawk:</span> <span class="v">${ac.squawk}</span><br>`:'');
+  infoEl.classList.add('show');
 }
 
 function positionPopup(cx, cy){
@@ -1211,10 +1277,8 @@ function hideTargetPopup(){
 }
 
 function hideTargetInfo(){
-  const p=document.getElementById('atc-player');
-  if(p){const a=p.querySelector('audio');if(a)a.pause()}
   infoEl.classList.remove('show');
-  S.selected=null; S.selectedAirport=null;
+  S.selected=null;
   updList();
 }
 
@@ -1254,7 +1318,7 @@ canvas.addEventListener('click',e=>{
     const d=Math.hypot(p.x-px,p.y-py);
     if(d<bestD){bestD=d;best=ac}
   }
-  if(best){S.selected=best;S.selectedAirport=null;showTargetInfo(best,e.clientX,e.clientY);updList();return}
+  if(best){S.selected=best;showTargetInfo(best);return}
   hideTargetPopup();
 });
 
@@ -1302,7 +1366,7 @@ canvas.addEventListener('mousemove',e=>{
 
 // ===== MAIN =====
 let _frame=0;
-function loop(t){render(t);if(++_frame%2===0)updList();requestAnimationFrame(loop)}
+function loop(t){try{render(t)}catch(e){console.warn('render',e)};if(++_frame%2===0)updList();requestAnimationFrame(loop)}
 function init(){
   applyTheme('green-scope');
   resize();

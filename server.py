@@ -91,9 +91,6 @@ class Handler(SimpleHTTPRequestHandler):
             _load_airport_types()
             self.send_json(_airport_types)
             return
-        if self.path == '/api/liveatc-debug':
-            self.send_json(self.debug_liveatc())
-            return
         super().do_GET()
 
     def send_json(self, data):
@@ -189,24 +186,6 @@ class Handler(SimpleHTTPRequestHandler):
         result = {'feeds': all_feeds}
         _liveatc_cache[icao] = (now, result)
         self.send_json(result)
-
-    def debug_liveatc(self):
-        results = {}
-        ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        headers = {'User-Agent': ua}
-        import ssl
-        for icao in ['kmsn', 'klax', 'kjfk']:
-            mounts = []
-            for mount in [icao, f'{icao}1_twr', f'{icao}_twr']:
-                try:
-                    ctx = ssl.create_default_context()
-                    pr = urlopen(Request(f'https://www.liveatc.net/play/{mount}.pls', headers=headers), timeout=5, context=ctx)
-                    body = pr.read().decode('utf-8', errors='replace')
-                    mounts.append({'mount': mount, 'status': pr.status, 'body': body[:200], 'has_file1': 'File1=' in body})
-                except Exception as e:
-                    mounts.append({'mount': mount, 'error': f'{type(e).__name__}: {str(e)[:100]}'})
-            results[icao] = mounts
-        return results
 
 if __name__ == '__main__':
     # Change to the directory containing this script so radar.html is served
