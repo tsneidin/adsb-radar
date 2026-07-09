@@ -40,10 +40,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #radar-wrap canvas{display:block;position:absolute;top:0;left:0;width:100%;height:100%}
 #hud{position:absolute;top:10px;left:12px;font-size:13px;line-height:1.6;pointer-events:none;text-shadow:0 0 6px var(--shadow),0 0 12px rgba(0,0,0,0.3);opacity:0.95;z-index:2}
 #hud span{display:block}
-#sidebar{width:350px;height:100%;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;padding:12px 14px;gap:8px;overflow-y:auto}
+#sidebar{width:350px;height:100%;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;padding:12px 14px;gap:8px;overflow-y:scroll;scrollbar-width:thin;scrollbar-color:var(--border3) transparent}
+#sidebar::-webkit-scrollbar{width:6px}
+#sidebar::-webkit-scrollbar-track{background:transparent}
+#sidebar::-webkit-scrollbar-thumb{background:var(--border3);border-radius:3px}
+#sidebar::-webkit-scrollbar-thumb:hover{background:var(--fg-muted)}
 #sidebar label,#sidebar .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--fg2);display:block;margin-bottom:2px}
 #sidebar .grp{border:1px solid var(--border2);border-radius:4px;padding:7px 9px;background:var(--bg3)}
 .grp h3{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--fg4);margin-bottom:4px}
+details.grp summary{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--fg4);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:6px}
+details.grp summary::-webkit-details-marker{display:none}
+details.grp summary::before{content:'▸';font-size:10px;transition:.15s}
+details.grp[open] summary::before{content:'▾'}
+details.grp[open]{padding-bottom:7px}
+details.grp:not([open]){padding-bottom:7px}
 .ctrl-row{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
 .ctrl-row button{flex:1;min-width:40px;padding:6px 8px;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:12px;cursor:pointer;border-radius:3px;transition:.12s;display:flex;align-items:center;justify-content:center}
 .ctrl-row button:hover{background:var(--border2);border-color:var(--border3);color:var(--fg3)}
@@ -58,9 +68,9 @@ input[type=range]{width:100%;height:4px;-webkit-appearance:none;appearance:none;
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--fg);cursor:pointer;box-shadow:0 0 8px var(--shadow)}
 input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--fg);cursor:pointer;border:none}
 #center-label{font-size:12px;color:var(--fg)}
-#tgt-list{flex:1;overflow-y:auto;min-height:60px;margin-top:1px}
+#tgt-list{margin-top:1px}
 #tgt-list table{width:100%;border-collapse:collapse;font-size:11px}
-#tgt-list th{text-align:left;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.5px;padding:3px 3px 2px;border-bottom:1px solid var(--border2);position:sticky;top:0;background:var(--bg2);font-weight:400}
+#tgt-list th{text-align:left;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.5px;padding:3px 3px 2px;border-bottom:1px solid var(--border2);background:var(--bg2);font-weight:400}
 #tgt-list td{padding:2px 4px;white-space:nowrap;border-bottom:1px solid var(--border4);color:var(--fg3);font-size:11px}
 #tgt-list tr.sel td{background:var(--border2);color:var(--fg)}
 #tgt-list tr{cursor:pointer}
@@ -108,50 +118,48 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       <div id="center-label" style="margin-top:2px;font-size:11px">MSN · Madison, WI</div>
       <div id="tile-status" style="padding-left:2px">loading map tiles...</div>
     </div>
-    <div class="grp">
-      <h3>Theme</h3>
-      <div class="ctrl-row" style="gap:8px">
+    <details class="grp">
+      <summary>Map Settings</summary>
+      <h3 style="font-size:10px;margin-bottom:3px">Theme</h3>
+      <div class="ctrl-row" style="gap:8px;margin-bottom:8px">
         <button class="small on" data-theme-btn="green-scope">Green</button>
         <button class="small" data-theme-btn="light">Light</button>
         <button class="small" data-theme-btn="dark">Dark</button>
         <button id="airport-toggle" class="small on" style="min-width:64px">Disp. Apts</button>
       </div>
-    </div>
-    <div class="grp">
-      <h3>Map</h3>
       <div style="display:flex;gap:4px;margin-bottom:8px">
         <button id="map-vfr" class="small on">VFR</button>
         <button id="map-osm" class="small">OSM</button>
         <button id="wx-radar-toggle" class="small">WX</button>
       </div>
-      <h3 style="font-size:10px;margin-bottom:2px">Range <span id="range-val">25 NM</span></h3>
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:12px">Range <span id="range-val">25 NM</span></h3>
       <input type="range" id="zoom-slider" min="15" max="100" step="5" value="25">
       <h3 style="font-size:10px;margin-bottom:2px;margin-top:8px">Map Brightness <span id="map-opacity-val">10%</span></h3>
       <input type="range" id="map-opacity-slider" min="0" max="100" step="5" value="10" style="margin-bottom:8px">
       <h3 style="font-size:10px;margin-bottom:2px">Text Brightness <span id="brightness-val">100%</span></h3>
       <input type="range" id="brightness-slider" min="10" max="100" step="5" value="100">
-    </div>
-    <div class="grp">
-      <h3>Collision Detection</h3>
+    </details>
+    <details class="grp">
+      <summary>Collision Detection</summary>
       <h3 style="font-size:10px;margin-bottom:2px">Horizontal Separation <span id="prox-nm-val">2 NM</span></h3>
       <input type="range" id="prox-nm-slider" min="0.5" max="10" step="0.5" value="2">
       <h3 style="font-size:10px;margin-top:4px;margin-bottom:2px">Vertical Separation <span id="prox-ft-val">700 FT</span></h3>
       <input type="range" id="prox-ft-slider" min="100" max="2000" step="100" value="700">
-    </div>
-    <div class="grp">
-      <h3>Filters</h3>
-      <h3 style="font-size:10px;margin-bottom:2px">Max Altitude <span id="alt-flt-val">FL999+</span></h3>
+    </details>
+    <details class="grp">
+      <summary>Filters</summary>
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Max Altitude <span id="alt-flt-val">FL999+</span></h3>
       <input type="range" id="alt-flt-slider" min="0" max="999" step="10" value="999">
       <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Min Speed <span id="min-spd-val">0 KT</span></h3>
       <input type="range" id="min-spd-slider" min="0" max="600" step="10" value="0">
       <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Squawk Prefix</h3>
       <input type="text" id="sqk-filter" placeholder="squawk, N#, or callsign" style="width:100%;padding:4px 6px" value="">
-    </div>
-<div class="grp" style="flex:none;height:200px;display:flex;flex-direction:column">
+    </details>
+    <div class="grp">
 <h3>Targets <span id="tgt-count">0</span> <button id="labels-toggle" class="small on" style="float:right;padding:1px 4px;font-size:9px">Labels</button></h3>
-      <div id="tgt-list" style="flex:1"></div>
+      <div id="tgt-list"></div>
     </div>
-    <div id="liveatc-section" class="grp" style="flex:1;overflow-y:auto"></div>
+    <div id="liveatc-section" class="grp"></div>
   </div>
 </div>
 <script>
