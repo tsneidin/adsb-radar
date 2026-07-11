@@ -43,6 +43,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #range-overlay label{font-size:10px;color:var(--fg-muted2);letter-spacing:0.5px;text-transform:uppercase}
 #range-overlay span{font-size:10px;color:var(--fg3)}
 #range-overlay input{width:100%;height:14px;margin:0;cursor:pointer;box-sizing:border-box}
+#pause-btn{position:absolute;bottom:10px;left:10px;z-index:5;width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg2) 75%,transparent);border:1px solid var(--border2);border-radius:3px;cursor:pointer;font-size:14px;color:var(--fg3);user-select:none}
+#pause-btn:hover{border-color:var(--fg);color:var(--fg)}
+#pause-btn.active{border-color:var(--fg);color:var(--fg);background:color-mix(in srgb,var(--bg) 85%,transparent)}
 #hud{position:absolute;top:10px;left:12px;font-size:13px;line-height:1.6;pointer-events:none;text-shadow:0 0 6px var(--shadow),0 0 12px rgba(0,0,0,0.3);opacity:0.95;z-index:2}
 #hud span{display:block}
 #sidebar{width:350px;height:100%;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;padding:12px 14px;gap:8px;overflow-y:scroll;scrollbar-width:thin;scrollbar-color:var(--border3) transparent}
@@ -122,6 +125,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 <div id="app">
   <div id="radar-wrap"><canvas id="c"></canvas><div id="hud"></div><div id="target-info"></div><div id="target-popup"></div>
     <div id="range-overlay"><div class="ro-hdr"><label>Zoom Range</label><span id="range-val">25 NM</span></div><input type="range" id="zoom-slider" min="15" max="100" step="5" value="25"></div>
+    <div id="pause-btn" title="Pause / Resume">⏸</div>
   </div>
   <div id="wx-popup"></div>
   <div id="font-popup" class="popup">
@@ -155,7 +159,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
     </div>
     <div id="help-popup-scroll">
       <h4>Radar Scope</h4>
-      <p>Displays real-time aircraft positions from ADS-B data over a selectable map. The rotating sweep line and green beam simulate a traditional radar display. Click any aircraft blip (triangle) to see detailed flight information.</p>
+      <p>Displays real-time aircraft positions from ADS-B data over a selectable map. The rotating sweep line and green beam simulate a traditional radar display. Click any aircraft blip (triangle) to see detailed flight information. Trails behind each aircraft show its recent path, and heading lines project forward to indicate direction of travel.</p>
       <h4>Map Settings</h4>
       <p><b>Theme</b> &mdash; Switch between Green Scope, Light, and Dark color schemes.<br>
       <b>Map Source</b> &mdash; VFR charts (sectional aeronautical) or standard OpenStreetMap.<br>
@@ -177,7 +181,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       <h4>Weather</h4>
       <p>With <b>Display Airports</b> enabled, hover any airport label to see current METAR conditions and TAF forecast. Weather data is fetched from AviationWeather.gov.</p>
       <h4>Keyboard &amp; Mouse</h4>
-      <p>Click and drag on the scope to pan. Hover near a target blip to preview its callsign, altitude, and speed. Scroll to zoom is not supported &mdash; use the range slider in Map Settings.</p>
+      <p>Hover near a target blip to preview its callsign, altitude, and speed. To change the center point, enter an ICAO code or city name in the sidebar Center field and click Go.</p>
       <hr>
       <h4>Data Sources &amp; Credits</h4>
       <p><a href="https://opendata.adsb.fi" target="_blank">ADSB.fi</a> &mdash; Real-time aircraft tracking data<br>
@@ -530,7 +534,7 @@ function isPublic(icao){
   return false;
 }
 const S = {
-  sweepDeg:0, rpm:5, maxRange:25, mr:25, mapSource:'vfr', mapOpacity:0.1, showWxRadar:false, wxRadarOpacity:0.35, wxRadarTiles:[],
+  sweepDeg:0, rpm:5, maxRange:25, mr:25, paused:false, mapSource:'vfr', mapOpacity:0.1, showWxRadar:false, wxRadarOpacity:0.35, wxRadarTiles:[],
   proxNm:2, proxFt:700, altFilter:999, minSpd:0, sqkFilter:'',
   airports:[], showAirports:true, wxCache:{}, hoveredAirport:null, selectedAirport:null, lastMetarFetch:0,
   dataMode:'live',
@@ -899,7 +903,7 @@ async function fetchLiveData(){
 }
 
 async function fetchData(){
-  if(S.fetching) return;
+  if(S.paused||S.fetching) return;
   S.fetching=true;
   const backoff=S.rateLimitBackoff;
   if(backoff>0) await new Promise(r=>setTimeout(r,backoff));
@@ -1017,16 +1021,17 @@ function drawBg(){
 }
 
 function render(ts){
-  const dt=S.lastFrame?(ts-S.lastFrame)/1000:1/60;
-  S.lastFrame=ts;
-  S.sweepDeg=normDeg(S.sweepDeg+S.rpm*360/60*dt);
-  if(!S.fetching&&ts-S.lastFetch>API_INTERVAL) fetchData();
-
-  const sr=toRad(S.sweepDeg), br=toRad(BEAM_DEG);
-  for(const ac of S.aircraft){
-    const b=toRad(bearing(S.centerLat,S.centerLng,ac.lat,ac.lon));
-    let d=b-sr; if(d>Math.PI) d-=2*Math.PI; if(d<-Math.PI) d+=2*Math.PI;
-    if(Math.abs(d)<br) ac.lastLit=ts;
+  if(!S.paused){
+    const dt=S.lastFrame?(ts-S.lastFrame)/1000:1/60;
+    S.lastFrame=ts;
+    S.sweepDeg=normDeg(S.sweepDeg+S.rpm*360/60*dt);
+    if(!S.fetching&&ts-S.lastFetch>API_INTERVAL) fetchData();
+    const sr=toRad(S.sweepDeg), br=toRad(BEAM_DEG);
+    for(const ac of S.aircraft){
+      const b=toRad(bearing(S.centerLat,S.centerLng,ac.lat,ac.lon));
+      let d=b-sr; if(d>Math.PI) d-=2*Math.PI; if(d<-Math.PI) d+=2*Math.PI;
+      if(Math.abs(d)<br) ac.lastLit=ts;
+    }
   }
 
   const{w,h,cx,cy,rad,mr}=S;
@@ -1295,6 +1300,13 @@ fontPopupClose.addEventListener('click',()=>fontPopup.classList.remove('show'));
 helpBtn.addEventListener('click',()=>helpPopup.classList.toggle('show'));
 helpPopupClose.addEventListener('click',()=>helpPopup.classList.remove('show'));
 helpPopup.addEventListener('click',e=>{if(e.target===helpPopup)helpPopup.classList.remove('show')});
+
+const pauseBtn = document.getElementById('pause-btn');
+pauseBtn.addEventListener('click',()=>{
+  S.paused=!S.paused;
+  pauseBtn.classList.toggle('active',S.paused);
+  if(!S.paused){S.lastFrame=0;S.lastFetch=-10000;fetchData()}
+});
 
 fontColorPicker.addEventListener('input',()=>{
   TC.fg=fontColorPicker.value;
