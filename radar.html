@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="unsafe-url">
+<title>ATC RADAR SCOPE — ADSB Monitor</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#000800; --bg2:#000c00; --bg3:#000a00; --bg4:#001a00;
+  --fg:#00ff33; --fg2:#00cc44; --fg3:#00dd44; --fg4:#00ee55;
+  --fg-muted:#009922; --fg-muted2:#008822; --fg-muted3:#007733;
+  --border:#003311; --border2:#002a11; --border3:#006622; --border4:#001500;
+  --glow:rgba(0,255,51,0.45); --glow2:rgba(0,255,51,0.3); --glow3:rgba(0,255,51,0.15);
+  --cvs-overlay:rgba(0,20,0,0.5);
+  --shadow:#00ff33;
+}
+[data-theme=light]{
+  --bg:#e8e8e8; --bg2:#ffffff; --bg3:#eaeaea; --bg4:#e0e0e0;
+  --fg:#222222; --fg2:#444444; --fg3:#555555; --fg4:#666666;
+  --fg-muted:#888888; --fg-muted2:#999999; --fg-muted3:#aaaaaa;
+  --border:#cccccc; --border2:#dddddd; --border3:#bbbbbb; --border4:#eeeeee;
+  --glow:rgba(0,0,0,0.15); --glow2:rgba(0,0,0,0.08); --glow3:rgba(0,0,0,0.04);
+  --cvs-overlay:rgba(240,240,240,0.3);
+  --shadow:#888888;
+}
+[data-theme=dark]{
+  --bg:#111111; --bg2:#1a1a1a; --bg3:#222222; --bg4:#2a2a2a;
+  --fg:#e0e0e0; --fg2:#aaaaaa; --fg3:#bbbbbb; --fg4:#cccccc;
+  --fg-muted:#666666; --fg-muted2:#777777; --fg-muted3:#888888;
+  --border:#333333; --border2:#444444; --border3:#555555; --border4:#2a2a2a;
+  --glow:rgba(255,255,255,0.12); --glow2:rgba(255,255,255,0.06); --glow3:rgba(255,255,255,0.03);
+  --cvs-overlay:rgba(255,255,255,0.05);
+  --shadow:#aaaaaa;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:'Consolas','Courier New',monospace;color:var(--fg);user-select:none;-webkit-font-smoothing:antialiased}
+#app{display:flex;width:100%;height:100%}
+#radar-wrap{flex:1;position:relative;min-width:0;overflow:hidden}
+#radar-wrap canvas{display:block;position:absolute;top:0;left:0;width:100%;height:100%}
+#range-overlay{position:absolute;bottom:10px;right:10px;z-index:5;display:flex;flex-direction:column;align-items:stretch;gap:3px;background:color-mix(in srgb,var(--bg2) 75%,transparent);border:1px solid var(--border2);border-radius:3px;padding:4px 8px;min-width:90px}
+#range-overlay .ro-hdr{display:flex;justify-content:space-between;align-items:center}
+#range-overlay label{font-size:10px;color:var(--fg-muted2);letter-spacing:0.5px;text-transform:uppercase}
+#range-overlay span{font-size:10px;color:var(--fg3)}
+#range-overlay input{width:100%;height:14px;margin:0;cursor:pointer;box-sizing:border-box}
+#pause-btn{position:absolute;bottom:10px;left:10px;z-index:5;width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg2) 75%,transparent);border:1px solid var(--border2);border-radius:3px;cursor:pointer;font-size:14px;color:var(--fg3);user-select:none}
+#pause-btn:hover{border-color:var(--fg);color:var(--fg)}
+#pause-btn.active{border-color:var(--fg);color:var(--fg);background:color-mix(in srgb,var(--bg) 85%,transparent)}
+#hud{position:absolute;top:10px;left:12px;font-size:13px;line-height:1.6;pointer-events:none;text-shadow:0 0 6px var(--shadow),0 0 12px rgba(0,0,0,0.3);opacity:0.95;z-index:2}
+#hud span{display:block}
+#sidebar{width:350px;height:100%;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;padding:12px 14px;gap:8px;overflow-y:scroll;scrollbar-width:thin;scrollbar-color:var(--border3) transparent}
+#sidebar::-webkit-scrollbar{width:6px}
+#sidebar::-webkit-scrollbar-track{background:transparent}
+#sidebar::-webkit-scrollbar-thumb{background:var(--border3);border-radius:3px}
+#sidebar::-webkit-scrollbar-thumb:hover{background:var(--fg-muted)}
+#sidebar label,#sidebar .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--fg2);display:block;margin-bottom:2px}
+#sidebar .grp{border:1px solid var(--border2);border-radius:4px;padding:7px 9px;background:var(--bg3)}
+.grp h3{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--fg4);margin-bottom:4px}
+details.grp summary{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--fg4);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:6px}
+details.grp summary::-webkit-details-marker{display:none}
+details.grp summary::before{content:'▸';font-size:10px;transition:.15s}
+details.grp[open] summary::before{content:'▾'}
+details.grp[open]{padding-bottom:7px}
+details.grp:not([open]){padding-bottom:7px}
+.ctrl-row{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.ctrl-row button{flex:1;min-width:40px;padding:6px 8px;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:12px;cursor:pointer;border-radius:3px;transition:.12s;display:flex;align-items:center;justify-content:center}
+.ctrl-row button:hover{background:var(--border2);border-color:var(--border3);color:var(--fg3)}
+.ctrl-row button.on{background:var(--border);border-color:var(--fg);color:var(--fg);box-shadow:0 0 8px var(--glow2)}
+.ctrl-row button.small{flex:0;padding:4px 8px}
+button.small{padding:3px 10px;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:11px;cursor:pointer;border-radius:3px;transition:.12s;flex:1}
+button.small:hover{background:var(--border2);border-color:var(--border3);color:var(--fg3)}
+button.small.on{background:var(--border);border-color:var(--fg);color:var(--fg)}
+input[type=text]{background:var(--bg4);border:1px solid var(--border2);color:var(--fg);font:inherit;font-size:12px;padding:5px 7px;border-radius:3px;outline:none;width:0;min-width:0;flex:1}
+input[type=text]:focus{border-color:var(--border3)}
+input[type=range]{width:100%;height:4px;-webkit-appearance:none;appearance:none;background:var(--bg4);border-radius:2px;outline:none;margin:3px 0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--fg);cursor:pointer;box-shadow:0 0 8px var(--shadow)}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--fg);cursor:pointer;border:none}
+#center-label{font-size:12px;color:var(--fg)}
+#tgt-list{margin-top:1px}
+#tgt-list table{width:100%;border-collapse:collapse;font-size:11px}
+#tgt-list th{text-align:left;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.5px;padding:3px 3px 2px;border-bottom:1px solid var(--border2);background:var(--bg2);font-weight:400}
+#tgt-list td{padding:2px 4px;white-space:nowrap;border-bottom:1px solid var(--border4);color:var(--fg3);font-size:11px}
+#tgt-list tr.sel td{background:var(--border2);color:var(--fg)}
+#tgt-list tr{cursor:pointer}
+#tgt-list .empty{color:var(--fg-muted3);font-size:12px;padding:16px 0;text-align:center}
+#tile-status{font-size:10px;color:var(--fg-muted2);text-transform:none;letter-spacing:0}
+#target-info{position:absolute;top:8px;right:8px;z-index:5;background:color-mix(in srgb,var(--bg2) 80%,transparent);border:1px solid var(--glow3);border-radius:3px;padding:6px 10px;font-size:11px;line-height:1.6;display:none;max-height:45%;overflow-y:auto;pointer-events:auto;min-width:160px}
+#target-info.show{display:block}
+#target-info .close{float:right;cursor:pointer;opacity:0.55;font-size:14px;line-height:1;margin:-2px -2px 0 0}
+#target-info .close:hover{opacity:0.7}
+#target-info .l{opacity:0.82}
+#target-info .v{float:right}
+#target-info audio{width:100%;height:28px;margin:2px 0}
+.atc-btn{display:block;width:100%;padding:5px 8px;margin:3px 0;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:12px;cursor:pointer;border-radius:3px;text-align:left}
+.atc-btn:hover{background:var(--border2);border-color:var(--border3);color:var(--fg3)}
+.atc-btn.playing{background:var(--border);border-color:var(--fg)}
+#target-popup{position:absolute;z-index:6;background:color-mix(in srgb,var(--bg) 88%,transparent);border:1px solid var(--fg);border-radius:4px;padding:8px 12px;font-size:11px;line-height:1.7;display:none;pointer-events:auto;min-width:140px;box-shadow:0 4px 20px rgba(0,0,0,0.6)}
+#target-popup.show{display:block}
+#target-popup .close{float:right;cursor:pointer;opacity:0.55;font-size:14px;line-height:1;margin:-2px -2px 0 6px}
+#target-popup .close:hover{opacity:0.7}
+#target-popup .l{opacity:0.7}
+#target-popup .v{float:right;margin-left:12px}
+#wx-popup{display:none;position:absolute;z-index:5;background:color-mix(in srgb,var(--bg2) 92%,transparent);border:1px solid var(--glow3);border-radius:3px;padding:8px 10px;font-size:10px;line-height:1.5;max-width:340px;pointer-events:none}
+#wx-popup.show{display:block}
+#wx-popup .h{color:var(--fg);font-weight:bold;margin-bottom:3px}
+#wx-popup .m{color:var(--fg2)}
+#wx-popup .t{color:var(--fg-muted)}
+.popup{display:none;position:absolute;z-index:10;background:color-mix(in srgb,var(--bg2) 96%,transparent);border:1px solid var(--border);border-radius:4px;padding:12px 14px;min-width:240px;box-shadow:0 8px 32px rgba(0,0,0,0.5);pointer-events:auto}
+.popup.show{display:block}
+#font-popup{top:50%;left:50%;transform:translate(-50%,-50%)}
+#font-popup select option{background:var(--bg2);color:var(--fg)}
+#help-popup{top:50%;left:50%;transform:translate(-50%,-50%);width:min(480px,90vw);max-height:min(520px,80vh)}
+#help-popup-scroll{overflow-y:auto;max-height:460px;padding-right:6px;font-size:11.5px;line-height:1.6;color:var(--fg2)}
+#help-popup-scroll h4{color:var(--fg);margin:10px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px}
+#help-popup-scroll p{margin:0 0 6px}
+#help-popup-scroll hr{border:none;border-top:1px solid var(--border);margin:12px 0}
+#help-popup-scroll a{color:var(--fg3)}
+@media(max-width:720px){
+  #app{flex-direction:column}
+  #sidebar{width:100%;height:240px;border-left:none;border-top:1px solid var(--border)}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="radar-wrap"><canvas id="c"></canvas><div id="hud"></div><div id="target-info"></div><div id="target-popup"></div>
+    <div id="range-overlay"><div class="ro-hdr"><label>Zoom Range</label><span id="range-val">25 NM</span></div><input type="range" id="zoom-slider" min="15" max="100" step="5" value="25"></div>
+    <div id="pause-btn" title="Pause / Resume">⏸</div>
+  </div>
+  <div id="wx-popup"></div>
+  <div id="font-popup" class="popup">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--fg4)">Font Settings</span>
+      <span id="font-popup-close" style="cursor:pointer;opacity:0.6">&times;</span>
+    </div>
+    <label class="lbl" style="margin-bottom:2px">Family</label>
+    <select id="font-family" style="width:100%;padding:4px 6px;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:12px;border-radius:3px;margin-bottom:6px">
+      <option value="Consolas,Courier New,monospace">Consolas</option>
+      <option value="Courier New,Courier,monospace">Courier New</option>
+      <option value="monospace">Monospace</option>
+      <option value="Arial,Helvetica,sans-serif">Arial</option>
+      <option value="Verdana,Geneva,sans-serif">Verdana</option>
+    </select>
+    <label class="lbl" style="margin-bottom:2px">Size <span id="font-size-val">12</span></label>
+    <input type="range" id="font-size-slider" min="8" max="24" step="1" value="12" style="margin-bottom:6px">
+    <label class="lbl" style="margin-bottom:2px">Style</label>
+    <div class="ctrl-row" style="gap:4px;margin-bottom:6px">
+      <button class="small on" data-font-style="bold" style="font-weight:bold">B</button>
+      <button class="small" data-font-style="italic" style="font-style:italic">I</button>
+      <button class="small" data-font-style="normal">N</button>
+    </div>
+    <label class="lbl" style="margin-bottom:2px">Color</label>
+    <input type="color" id="font-color" value="#00ff33" style="width:100%;height:28px;padding:2px;border:1px solid var(--border2);border-radius:3px;background:var(--bg4);cursor:pointer">
+  </div>
+  <div id="help-popup" class="popup">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--fg4)">Help &amp; Credits</span>
+      <span id="help-popup-close" style="cursor:pointer;opacity:0.6">&times;</span>
+    </div>
+    <div id="help-popup-scroll">
+      <h4>Radar Scope</h4>
+      <p>Displays real-time aircraft positions from ADS-B data over a selectable map. The rotating sweep line and green beam simulate a traditional radar display. Click any aircraft blip (triangle) to see detailed flight information. Trails behind each aircraft show its recent path, and heading lines project forward to indicate direction of travel.</p>
+      <h4>Map Settings</h4>
+      <p><b>Theme</b> &mdash; Switch between Green Scope, Light, and Dark color schemes.<br>
+      <b>Map Source</b> &mdash; VFR charts (sectional aeronautical) or standard OpenStreetMap.<br>
+      <b>Weather Radar</b> &mdash; Toggle NEXRAD precipitation overlay on the map.<br>
+      <b>Display Airports</b> &mdash; Show/hide airport labels. Hover for METAR &amp; TAF weather reports.<br>
+      <b>Map Opacity</b> &mdash; Adjust map layer transparency over the radar background.</p>
+      <h4>Collision Detection</h4>
+      <p>Sets proximity warning thresholds. Aircraft within the specified lateral (NM) and vertical (FT) distance of each other are highlighted in red on the scope and in the target list.</p>
+      <h4>Filters</h4>
+      <p><b>Max Altitude</b> &mdash; Hides aircraft above this flight level.<br>
+      <b>Min Speed</b> &mdash; Hides aircraft below this ground speed.<br>
+      <b>Squawk Prefix</b> &mdash; Filters by squawk code, registration (N-number), or callsign prefix.</p>
+      <h4>Font Settings</h4>
+      <p>Customize the aircraft label font: family, size, style (Bold/Italic/Normal), and color. Changes apply to all scope labels, airport ICAOs, and the center label.</p>
+      <h4>Target List</h4>
+      <p>The right sidebar lists all aircraft sorted by distance from the center point. Columns show callsign, distance (NM), bearing, altitude, speed, and heading. Click a row to select and highlight that aircraft on the scope.</p>
+      <h4>LiveATC</h4>
+      <p>When an airport is selected or the center is set to a towered airport, LiveATC audio feeds appear. Click any feed button to stream live ATC communications. The header shows the ICAO code followed by &ldquo;Audio&rdquo;.</p>
+      <h4>Weather</h4>
+      <p>With <b>Display Airports</b> enabled, hover any airport label to see current METAR conditions and TAF forecast. Weather data is fetched from AviationWeather.gov.</p>
+      <h4>Keyboard &amp; Mouse</h4>
+      <p>Hover near a target blip to preview its callsign, altitude, and speed. To change the center point, enter an ICAO code or city name in the sidebar Center field and click Go.</p>
+      <hr>
+      <h4>Data Sources &amp; Credits</h4>
+      <p><a href="https://opendata.adsb.fi" target="_blank">ADSB.fi</a> &mdash; Real-time aircraft tracking data<br>
+      <a href="https://www.aviationweather.gov" target="_blank">AviationWeather.gov (NOAA/NWS)</a> &mdash; METAR &amp; TAF weather reports<br>
+      <a href="https://vfrmap.com" target="_blank">VFRMap.com</a> &mdash; VFR aeronautical chart tiles<br>
+      <a href="https://www.openstreetmap.org" target="_blank">OpenStreetMap</a> &mdash; Standard map tiles<br>
+      <a href="https://mesonet.agron.iastate.edu" target="_blank">Iowa State Mesonet</a> &mdash; NEXRAD weather radar tiles<br>
+      <a href="https://www.liveatc.net" target="_blank">LiveATC.net</a> &mdash; ATC audio streaming<br>
+      <a href="https://davidmegginson.github.io/ourairports-data/" target="_blank">OurAirports (David Megginson)</a> &mdash; Airport database</p>
+    </div>
+  </div>
+  <div id="sidebar">
+    <div class="grp">
+      <h3>Center</h3>
+      <div class="ctrl-row">
+        <input type="text" id="apt-input" placeholder="ICAO or city" style="text-transform:uppercase" value="KMSN">
+        <button class="small" id="apt-go">Go</button>
+        <button class="small" id="apt-home" title="Reset to MSN">⌂</button>
+      </div>
+      <div id="center-label" style="margin-top:2px;font-size:11px">MSN · Madison, WI</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div id="tile-status" style="padding-left:2px;flex:1">loading map tiles...</div>
+        <span id="help-btn" style="cursor:pointer;font-size:13px;opacity:0.5;padding:0 4px" title="Help &amp; Credits">?</span>
+      </div>
+    </div>
+    <details class="grp">
+      <summary>Map Settings</summary>
+      <h3 style="font-size:10px;margin-bottom:3px">Theme</h3>
+      <div class="ctrl-row" style="gap:8px;margin-bottom:8px">
+        <button class="small on" data-theme-btn="green-scope">Green</button>
+        <button class="small" data-theme-btn="light">Light</button>
+        <button class="small" data-theme-btn="dark">Dark</button>
+        <button id="airport-toggle" class="small on" style="min-width:64px">Disp. Apts</button>
+      </div>
+      <div style="display:flex;gap:4px;margin-bottom:8px">
+        <button id="map-vfr" class="small on">VFR</button>
+        <button id="map-osm" class="small">OSM</button>
+        <button id="wx-radar-toggle" class="small">WX</button>
+      </div>
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:8px">Map Brightness <span id="map-opacity-val">10%</span></h3>
+      <input type="range" id="map-opacity-slider" min="0" max="100" step="5" value="10" style="margin-bottom:8px">
+      <button class="small" id="font-settings-btn" style="margin-top:8px;width:100%">Font Settings</button>
+    </details>
+    <details class="grp">
+      <summary>Collision Detection</summary>
+      <h3 style="font-size:10px;margin-bottom:2px">Horizontal Separation <span id="prox-nm-val">2 NM</span></h3>
+      <input type="range" id="prox-nm-slider" min="0.5" max="10" step="0.5" value="2">
+      <h3 style="font-size:10px;margin-top:4px;margin-bottom:2px">Vertical Separation <span id="prox-ft-val">700 FT</span></h3>
+      <input type="range" id="prox-ft-slider" min="100" max="2000" step="100" value="700">
+    </details>
+    <details class="grp">
+      <summary>Filters</summary>
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Max Altitude <span id="alt-flt-val">FL999+</span></h3>
+      <input type="range" id="alt-flt-slider" min="0" max="999" step="10" value="999">
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Min Speed <span id="min-spd-val">0 KT</span></h3>
+      <input type="range" id="min-spd-slider" min="0" max="600" step="10" value="0">
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Squawk Prefix</h3>
+      <input type="text" id="sqk-filter" placeholder="squawk, N#, or callsign" style="width:100%;padding:4px 6px" value="">
+    </details>
+    <div class="grp">
+<h3>Targets <span id="tgt-count">0</span> <button id="labels-toggle" class="small on" style="float:right;padding:1px 4px;font-size:9px">Labels</button></h3>
+      <div id="tgt-list"></div>
+    </div>
+    <div id="liveatc-section" class="grp"></div>
+  </div>
+</div>
+<script>
+// ===== CONFIG =====
+const NM_PER_DEG = 60;
+const BEAM_DEG = 2.5;
+const DECAY_MS = 18750;
+const API_TIMEOUT = 10000;
+const API_INTERVAL = 6000;
+
+// ===== DOM =====
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const bgCanvas = document.createElement('canvas');
+const bgCtx = bgCanvas.getContext('2d');
+const hudEl = document.getElementById('hud');
+const tgtList = document.getElementById('tgt-list');
+const tgtCount = document.getElementById('tgt-count');
+const popupEl = document.getElementById('target-popup');
+const wxPopup = document.getElementById('wx-popup');
+const airportToggle = document.getElementById('airport-toggle');
+const zoomSlider = document.getElementById('zoom-slider');
+const fontColorPicker = document.getElementById('font-color');
+const fontPopup = document.getElementById('font-popup');
+const fontPopupClose = document.getElementById('font-popup-close');
+const fontSettingsBtn = document.getElementById('font-settings-btn');
+const fontFamily = document.getElementById('font-family');
+const fontStyleBtns = document.querySelectorAll('[data-font-style]');
+const fontSizeSlider = document.getElementById('font-size-slider');
+const fontSizeVal = document.getElementById('font-size-val');
+const helpPopup = document.getElementById('help-popup');
+const helpPopupClose = document.getElementById('help-popup-close');
+const helpBtn = document.getElementById('help-btn');
+const rangeVal = document.getElementById('range-val');
+const proxNmSlider = document.getElementById('prox-nm-slider');
+const proxFtSlider = document.getElementById('prox-ft-slider');
+const proxNmVal = document.getElementById('prox-nm-val');
+const proxFtVal = document.getElementById('prox-ft-val');
+const mapOpacitySlider = document.getElementById('map-opacity-slider');
+const mapOpacityVal = document.getElementById('map-opacity-val');
+const mapVfr = document.getElementById('map-vfr');
+const mapOsm = document.getElementById('map-osm');
+const wxRadarToggle = document.getElementById('wx-radar-toggle');
+const altFltSlider = document.getElementById('alt-flt-slider');
+const altFltVal = document.getElementById('alt-flt-val');
+const minSpdSlider = document.getElementById('min-spd-slider');
+const minSpdVal = document.getElementById('min-spd-val');
+const sqkFilter = document.getElementById('sqk-filter');
+const aptInput = document.getElementById('apt-input');
+const aptGo = document.getElementById('apt-go');
+const aptHome = document.getElementById('apt-home');
+const centerLabel = document.getElementById('center-label');
+const tileStatus = document.getElementById('tile-status');
+
+// ===== AIRPORT DATABASE =====
+const AIRPORTS = {
+  'KMSN':{n:'Dane County Regional',lat:43.1399,lon:-89.3375,st:'WI'},
+  'KMKE':{n:'Milwaukee Mitchell',lat:42.9472,lon:-87.8966,st:'WI'},
+  'KGRB':{n:'Green Bay Austin Straubel',lat:44.4851,lon:-88.1296,st:'WI'},
+  'KRST':{n:'Rochester International',lat:43.9083,lon:-92.5000,st:'MN'},
+  'KEAU':{n:'Chippewa Valley Regional',lat:44.8658,lon:-91.4843,st:'WI'},
+  'KCWA':{n:'Central Wisconsin',lat:44.7776,lon:-89.6668,st:'WI'},
+  'KLSE':{n:'La Crosse Regional',lat:43.8790,lon:-91.2567,st:'WI'},
+  'KDBQ':{n:'Dubuque Regional',lat:42.4020,lon:-90.7095,st:'IA'},
+  'KCID':{n:'Cedar Rapids/Eastern Iowa',lat:41.8847,lon:-91.7108,st:'IA'},
+  'KDSM':{n:'Des Moines International',lat:41.5340,lon:-93.6631,st:'IA'},
+  'KALO':{n:'Waterloo Regional',lat:42.5571,lon:-92.4004,st:'IA'},
+  'KORD':{n:"O'Hare International",lat:41.9742,lon:-87.9073,st:'IL'},
+  'KMDW':{n:'Chicago Midway',lat:41.7858,lon:-87.7524,st:'IL'},
+  'KRFD':{n:'Chicago Rockford',lat:42.1953,lon:-89.0972,st:'IL'},
+  'KPIA':{n:'General Wayne Downing',lat:40.6642,lon:-89.6933,st:'IL'},
+  'KBMI':{n:'Central Illinois Regional',lat:40.4771,lon:-88.9159,st:'IL'},
+  'KCMI':{n:'University of Illinois Willard',lat:40.0392,lon:-88.2781,st:'IL'},
+  'KSPI':{n:'Abraham Lincoln Capital',lat:39.8441,lon:-89.6779,st:'IL'},
+  'KDPA':{n:'Dupage',lat:41.9078,lon:-88.2486,st:'IL'},
+  'KMSP':{n:'Minneapolis-St Paul',lat:44.8804,lon:-93.2168,st:'MN'},
+  'KSTP':{n:'St Paul Downtown',lat:44.9345,lon:-93.0603,st:'MN'},
+  'KDLH':{n:'Duluth International',lat:46.8421,lon:-92.1936,st:'MN'},
+  'KDTW':{n:'Detroit Metro',lat:42.2124,lon:-83.3534,st:'MI'},
+  'KGRR':{n:'Grand Rapids Gerald R Ford',lat:42.8808,lon:-85.5228,st:'MI'},
+  'KLAN':{n:'Lansing Capital Region',lat:42.7787,lon:-84.5874,st:'MI'},
+  'KFNT':{n:'Flint Bishop',lat:42.9655,lon:-83.7436,st:'MI'},
+  'KAZO':{n:'Kalamazoo Battle Creek',lat:42.2349,lon:-85.5521,st:'MI'},
+  'KSBN':{n:'South Bend Regional',lat:41.7087,lon:-86.3173,st:'IN'},
+  'KFWA':{n:'Fort Wayne International',lat:40.9785,lon:-85.1951,st:'IN'},
+  'KIND':{n:'Indianapolis International',lat:39.7173,lon:-86.2944,st:'IN'},
+  'KCMH':{n:'John Glenn Columbus',lat:39.9981,lon:-82.8919,st:'OH'},
+  'KDAY':{n:'Dayton International',lat:39.9024,lon:-84.2194,st:'OH'},
+  'KCVG':{n:'Cincinnati Northern Kentucky',lat:39.0461,lon:-84.6619,st:'KY'},
+  'KCLE':{n:'Cleveland Hopkins',lat:41.4109,lon:-81.8534,st:'OH'},
+  'KSTL':{n:'St Louis Lambert',lat:38.7487,lon:-90.3700,st:'MO'},
+  'KMCI':{n:'Kansas City International',lat:39.2975,lon:-94.7139,st:'MO'},
+  'KOMA':{n:'Eppley Airfield',lat:41.3032,lon:-95.8941,st:'NE'},
+  'KLNK':{n:'Lincoln Airport',lat:40.8510,lon:-96.7592,st:'NE'},
+  'KATL':{n:'Hartsfield-Jackson Atlanta',lat:33.6407,lon:-84.4277,st:'GA'},
+  'KDEN':{n:'Denver International',lat:39.8561,lon:-104.6737,st:'CO'},
+  'KDFW':{n:'Dallas/Fort Worth',lat:32.8998,lon:-97.0403,st:'TX'},
+  'KSEA':{n:'Seattle-Tacoma',lat:47.4489,lon:-122.3094,st:'WA'},
+  'KSFO':{n:'San Francisco International',lat:37.6213,lon:-122.3790,st:'CA'},
+  'KLAX':{n:'Los Angeles International',lat:33.9425,lon:-118.4081,st:'CA'},
+  'KJFK':{n:'John F Kennedy',lat:40.6413,lon:-73.7781,st:'NY'},
+  'KLGA':{n:'LaGuardia',lat:40.7769,lon:-73.8740,st:'NY'},
+  'KDCA':{n:'Ronald Reagan Washington National',lat:38.8521,lon:-77.0377,st:'DC'},
+  'KIAD':{n:'Washington Dulles',lat:38.9445,lon:-77.4558,st:'VA'},
+  'KBOS':{n:'Boston Logan',lat:42.3656,lon:-71.0096,st:'MA'},
+  'KPHL':{n:'Philadelphia International',lat:39.8719,lon:-75.2411,st:'PA'},
+  'KBWI':{n:'Baltimore/Washington',lat:39.1754,lon:-76.6684,st:'MD'},
+  'KMIA':{n:'Miami International',lat:25.7932,lon:-80.2906,st:'FL'},
+  'KMCO':{n:'Orlando International',lat:28.4294,lon:-81.3089,st:'FL'},
+  'KTPA':{n:'Tampa International',lat:27.9795,lon:-82.5347,st:'FL'},
+  'KPHX':{n:'Phoenix Sky Harbor',lat:33.4343,lon:-112.0116,st:'AZ'},
+  'KLAS':{n:'Las Vegas McCarran',lat:36.0800,lon:-115.1365,st:'NV'},
+  'KSLC':{n:'Salt Lake City',lat:40.7884,lon:-111.9778,st:'UT'},
+  'KPDX':{n:'Portland International',lat:45.5887,lon:-122.5975,st:'OR'},
+  'KOSH':{n:'Wittman Regional',lat:43.9784,lon:-88.5570,st:'WI'},
+  'KMTW':{n:'Manitowoc County',lat:44.1288,lon:-87.6806,st:'WI'},
+  'KSTE':{n:'Stevens Point Municipal',lat:44.5451,lon:-89.5303,st:'WI'},
+  'KISW':{n:'Wisconsin Rapids',lat:44.3609,lon:-89.8363,st:'WI'},
+  'KRHI':{n:'Rhinelander Oneida County',lat:45.6312,lon:-89.4675,st:'WI'},
+  'KDLL':{n:'Baraboo Wisconsin Dells',lat:43.5219,lon:-89.7709,st:'WI'},
+  'KEFT':{n:'Monroe Municipal',lat:42.6149,lon:-89.5904,st:'WI'},
+  'KRYV':{n:'Watertown Municipal',lat:43.1699,lon:-88.7232,st:'WI'},
+  'KUNU':{n:'Dodge County',lat:43.4266,lon:-88.7032,st:'WI'},
+  'KJVL':{n:'Southern Wisconsin Regional',lat:42.6203,lon:-89.0416,st:'WI'},
+  'C29':{n:'Middleton Municipal - Morey Field',lat:43.1144,lon:-89.5317,st:'WI'},
+   '9WN2':{n:'Waunakee Airport',lat:43.1724,lon:-89.4415,st:'WI'},
+   'W73':{n:'Wilderness Resort Airport',lat:43.6573,lon:-89.8228,st:'WI'},
+   '4WI5':{n:'Apple Grove Airport',lat:43.2127,lon:-89.4849,st:'WI'},
+};
+
+// ===== LIVEAAT CACHE =====
+const liveatcCache = {};
+
+async function getLiveAtcFeeds(icao) {
+  if (liveatcCache[icao]) return liveatcCache[icao];
+  try {
+    const r = await fetch(`/api/liveatc/${icao}`);
+    const d = await r.json();
+    liveatcCache[icao] = d.feeds || [];
+    return liveatcCache[icao];
+  } catch(e) {
+    return [];
+  }
+}
+
+async function showAirportLiveAtc(ap) {
+  const icao = (ap.wxId || ap.icao || '').toLowerCase();
+  if (!icao) return;
+  const feeds = await getLiveAtcFeeds(icao);
+  S.selectedAirport = ap;
+  const sec=document.getElementById('liveatc-section');
+  let h = `<b>${ap.icao} Audio</b><br>`;
+  if (feeds.length) {
+    for (const f of feeds) {
+      h += `<button class="atc-btn" data-stream="${f.streamId}" onclick="playAtc(this,'${f.streamId}')">▶ ${f.label}</button>`;
+    }
+  } else {
+    h += `<span style="color:${TC.fg}">No LiveATC feeds found</span>`;
+  }
+  sec.innerHTML = h + '<div id="atc-player" style="margin-top:2px"></div>';
+}
+
+function autoShowLiveAtc(){
+  const q=S.currentAirport;
+  if(!q) return;
+  const ap=S.airports.find(a=>(a.wxId||a.icao)==q);
+  if(ap){showAirportLiveAtc(ap);return}
+  // Also check AIRPORTS dict for airports not in S.airports (e.g. local DB entries)
+  const a=AIRPORTS[q];
+  if(a) showAirportLiveAtc({icao:q,lat:a.lat,lon:a.lon,name:a.n,wxId:q.length===3&&/^[A-Z]/.test(q)?'K'+q:q});
+}
+
+// ===== AIRPORT DATA LOADER =====
+async function loadAirports(){
+  try{
+    const mod=await import('https://cdn.jsdelivr.net/npm/@squawk/airport-data@0.7.10/dist/browser.js');
+    const dataset=await mod.loadUsBundledAirports();
+    const ap=[];
+    for(const r of dataset.records){
+      if(r.country!=='US') continue;
+      if(r.facilityType!=='AIRPORT') continue;
+      if(r.useType!=='PUBLIC') continue;
+      if(!r.fuelTypes) continue;
+      const wxId=r.icao||(r.faaId.length===3&&/^[A-Z]/.test(r.faaId)?'K'+r.faaId:r.faaId);
+      ap.push({icao:r.faaId,lat:r.lat,lon:r.lon,name:r.name,wxId,metar:'',taf:'',runways:r.runways});
+    }
+    const seen=new Set(ap.map(a=>a.icao));
+    for(const k of Object.keys(AIRPORTS)){
+      const icao=k.replace(/^K/,'');
+      if(!seen.has(icao)){
+        const wxId=k.length===3&&/^[A-Z]/.test(k)?'K'+k:k;
+        ap.push({icao,lat:AIRPORTS[k].lat,lon:AIRPORTS[k].lon,name:AIRPORTS[k].n,wxId,metar:'',taf:''});
+      }
+    }
+    S.airports=ap;
+    console.log('airports loaded',ap.length);
+  }catch(e){console.error('airport load error',e)}
+  if(!S.airports||!S.airports.length){
+    const seen=new Set(S.airports.map(a=>a.icao));
+    for(const k of Object.keys(AIRPORTS)){
+      const icao=k.replace(/^K/,'');
+      if(!seen.has(icao)){
+        const wxId=k.length===3&&/^[A-Z]/.test(k)?'K'+k:k;
+        S.airports.push({icao,lat:AIRPORTS[k].lat,lon:AIRPORTS[k].lon,name:AIRPORTS[k].n,wxId,metar:'',taf:''});
+      }
+    }
+  }
+  console.log('airports ready:',S.airports.length);
+}
+loadAirports();
+
+// ===== METAR/TAF =====
+async function fetchWx(ap){
+  const wxId=ap.wxId||ap.icao;
+  if(S.wxCache[wxId]&&Date.now()-S.wxCache[wxId].ts<300000) return S.wxCache[wxId];
+  const cached=S.wxCache[wxId]||{metar:'',taf:''};
+  cached.ts=Date.now();
+  S.wxCache[wxId]=cached;
+  return cached;
+}
+
+async function fetchScopeWx(){
+  const aps=S.airports.filter(a=>{
+    const d=distNm(S.centerLat,S.centerLng,a.lat,a.lon);
+    return d<=S.maxRange && (a.wxId||a.icao||'').startsWith('K');
+  });
+  if(!aps.length) return;
+  const ids=aps.map(a=>a.wxId||a.icao).join(',');
+  const isLocal=location.port==='8080'||!location.port;
+  const base=isLocal?'':'https://www.aviationweather.gov';
+  const now=Date.now();
+  try{
+    const r=await fetch(base+`/api/data/metar?ids=${ids}&format=json&date=${new Date().toISOString().slice(0,10)}`,{cache:'no-store'});
+    if(!r.ok) return;
+    const data=await r.json();
+    if(!Array.isArray(data)) return;
+    for(const st of data){
+      const id=st.icaoId||st.stationId;
+      if(!id) continue;
+      if(!S.wxCache[id]) S.wxCache[id]={metar:'',taf:'',lat:st.lat,lon:st.lon};
+      S.wxCache[id].metar=st.rawOb||'';
+      S.wxCache[id].lat=st.lat;
+      S.wxCache[id].lon=st.lon;
+      S.wxCache[id].ts=now;
+    }
+  }catch(e){console.error('metar ids error',e)}
+  try{
+    const r=await fetch(base+`/api/data/taf?ids=${ids}&format=json&date=${new Date().toISOString().slice(0,10)}`,{cache:'no-store'});
+    if(!r.ok) return;
+    const data=await r.json();
+    if(!Array.isArray(data)) return;
+    for(const st of data){
+      const id=st.icaoId||st.stationId;
+      if(!id) continue;
+      if(!S.wxCache[id]) S.wxCache[id]={metar:'',taf:''};
+      S.wxCache[id].taf=st.rawOb||'';
+      S.wxCache[id].ts=now;
+    }
+  }catch(e){console.error('taf ids error',e)}
+  S.lastMetarFetch=now;
+}
+
+// ===== STATE =====
+const S = {
+  sweepDeg:0, rpm:5, maxRange:25, mr:25, paused:false, mapSource:'vfr', mapOpacity:0.1, showWxRadar:false, wxRadarOpacity:0.35, wxRadarTiles:[],
+  proxNm:2, proxFt:700, altFilter:999, minSpd:0, sqkFilter:'',
+  airports:[], showAirports:true, wxCache:{}, hoveredAirport:null, selectedAirport:null, lastMetarFetch:0,
+  dataMode:'live',
+  aircraft:[], lastFrame:0,
+  lastFetch:-10000, fetching:false,
+  rateLimitBackoff:0,
+  nextId:1, dpr:1,
+  w:0, h:0, cx:0, cy:0, rad:0,
+  centerLat:43.1399, centerLng:-89.3375,
+  currentAirport:'KMSN',
+  mapTiles:null, mapTilesLoading:false,
+  bgDirty:true,
+  showAllLabels:true,
+  fontFamily:'Consolas,Courier New,monospace', fontSize:12, fontStyle:'bold',
+  theme:'green-scope',
+};
+
+// ===== THEME COLORS =====
+const THEMES = {
+  'green-scope':{
+    bg:'#000800',
+    fg:'#00ff33', fgSel:'#88ffaa', fgProx:'#ff5555',
+    dim:'rgba(0,255,51,0.02)', dim2:'rgba(0,255,51,0.06)', dim3:'rgba(0,255,51,0.1)',
+    dim4:'rgba(0,255,51,0.15)', dim5:'rgba(0,255,51,0.2)', dim6:'rgba(0,255,51,0.25)',
+    dim7:'rgba(0,255,51,0.3)', dim8:'rgba(0,255,51,0.35)', dim9:'rgba(0,255,51,0.45)',
+    dim10:'rgba(0,255,51,0.5)', dim11:'rgba(0,255,51,1)', dim12:'rgba(0,255,51,0.7)',
+    dim13:'rgba(0,255,51,1)', dim14:'rgba(0,255,51,0.06)',
+    light:'rgba(120,255,120,0.4)', light2:'rgba(180,255,180,0.55)',
+    light3:'rgba(150,255,150,0.8)', light4:'#ccffcc',
+    shadow:'#00ff33', shadowSel:'#66ff88', shadowProx:'#ff3333',
+    prox:'#ff4444', prox2:'#ff6666', prox3:'rgba(255,50,50,0.2)', prox4:'rgba(255,100,100,0.8)',
+    overlay:'rgba(0,20,0,0.5)',
+    error:'#ff4444',
+    sweep1:'rgba(0,255,51,0.06)', sweep2:'rgba(0,255,51,0.025)', sweep3:'rgba(0,255,51,0)',
+  },
+  'dark':{
+    bg:'#111111',
+    fg:'#cccccc', fgSel:'#eeeeee', fgProx:'#ff5555',
+    dim:'rgba(255,255,255,0.02)', dim2:'rgba(255,255,255,0.04)', dim3:'rgba(255,255,255,0.08)',
+    dim4:'rgba(255,255,255,0.12)', dim5:'rgba(255,255,255,0.15)', dim6:'rgba(255,255,255,0.2)',
+    dim7:'rgba(255,255,255,0.25)', dim8:'rgba(255,255,255,0.3)', dim9:'rgba(255,255,255,0.35)',
+    dim10:'rgba(255,255,255,0.4)', dim11:'rgba(255,255,255,1)', dim12:'rgba(255,255,255,0.55)',
+    dim13:'rgba(255,255,255,1)', dim14:'rgba(255,255,255,0.04)',
+    light:'rgba(200,200,200,0.4)', light2:'rgba(200,200,200,0.5)',
+    light3:'rgba(200,200,200,0.7)', light4:'#dddddd',
+    shadow:'#aaaaaa', shadowSel:'#cccccc', shadowProx:'#ff5555',
+    prox:'#ff5555', prox2:'#ff7777', prox3:'rgba(255,80,80,0.2)', prox4:'rgba(255,80,80,0.8)',
+    overlay:'rgba(0,0,0,0.12)',
+    error:'#ff5555',
+    sweep1:'rgba(255,255,255,0.04)', sweep2:'rgba(255,255,255,0.015)', sweep3:'rgba(255,255,255,0)',
+  },
+  'light':{
+    bg:'#e8e8e8',
+    fg:'#333333', fgSel:'#666666', fgProx:'#cc3333',
+    dim:'rgba(0,0,0,0.03)', dim2:'rgba(0,0,0,0.06)', dim3:'rgba(0,0,0,0.1)',
+    dim4:'rgba(0,0,0,0.15)', dim5:'rgba(0,0,0,0.2)', dim6:'rgba(0,0,0,0.25)',
+    dim7:'rgba(0,0,0,0.3)', dim8:'rgba(0,0,0,0.35)', dim9:'rgba(0,0,0,0.45)',
+    dim10:'rgba(0,0,0,0.5)', dim11:'rgba(0,0,0,1)', dim12:'rgba(0,0,0,0.7)',
+    dim13:'rgba(0,0,0,1)', dim14:'rgba(0,0,0,0.06)',
+    light:'rgba(50,50,50,0.4)', light2:'rgba(50,50,50,0.55)',
+    light3:'rgba(50,50,50,0.8)', light4:'#888888',
+    shadow:'#888888', shadowSel:'#666666', shadowProx:'#cc3333',
+    prox:'#cc3333', prox2:'#cc5555', prox3:'rgba(200,50,50,0.2)', prox4:'rgba(200,50,50,0.8)',
+    overlay:'rgba(255,255,255,0.1)',
+    error:'#cc3333',
+    sweep1:'rgba(0,0,0,0.04)', sweep2:'rgba(0,0,0,0.015)', sweep3:'rgba(0,0,0,0)',
+  },
+};
+
+let TC = {};
+function applyTheme(name){
+  S.theme=name;
+  document.documentElement.setAttribute('data-theme',name);
+  document.querySelectorAll('[data-theme-btn]').forEach(b=>{
+    b.classList.toggle('on',b.dataset.themeBtn===name);
+  });
+  Object.assign(TC, THEMES[name]);
+  // scope sweep always green
+  TC.sweep1='rgba(0,255,51,0.06)'; TC.sweep2='rgba(0,255,51,0.025)'; TC.sweep3='rgba(0,255,51,0)';
+  fontColorPicker.value=TC.fg;
+  const mo=TC.overlay.match(/rgba\((\d+),(\d+),(\d+),/);
+  TC.overlayRGB=mo?`${mo[1]},${mo[2]},${mo[3]}`:'0,20,0';
+  TC.overlayRGBinv=mo?`${255-mo[1]},${255-mo[2]},${255-mo[3]}`:'255,235,255';
+  const mapB={'green-scope':0.8,'light':0.6,'dark':0.85}[name];
+  if(mapB!=null){S.mapOpacity=mapB;mapOpacitySlider.value=Math.round(mapB*100);mapOpacityVal.textContent=Math.round(mapB*100)+'%'}
+  S.bgDirty=true;
+}
+
+// ===== UTILITIES =====
+const STATE_TZ = {
+  'AL':'America/Chicago','AR':'America/Chicago','AZ':'America/Phoenix','CA':'America/Los_Angeles',
+  'CO':'America/Denver','CT':'America/New_York','DC':'America/New_York','DE':'America/New_York',
+  'FL':'America/New_York','GA':'America/New_York','IA':'America/Chicago','ID':'America/Denver',
+  'IL':'America/Chicago','IN':'America/Indianapolis','KS':'America/Chicago','KY':'America/New_York',
+  'LA':'America/Chicago','MA':'America/New_York','MD':'America/New_York','ME':'America/New_York',
+  'MI':'America/Detroit','MN':'America/Chicago','MO':'America/Chicago','MS':'America/Chicago',
+  'MT':'America/Denver','NC':'America/New_York','ND':'America/Chicago','NE':'America/Chicago',
+  'NH':'America/New_York','NJ':'America/New_York','NM':'America/Denver','NV':'America/Los_Angeles',
+  'NY':'America/New_York','OH':'America/New_York','OK':'America/Chicago','OR':'America/Los_Angeles',
+  'PA':'America/New_York','RI':'America/New_York','SC':'America/New_York','SD':'America/Chicago',
+  'TN':'America/Chicago','TX':'America/Chicago','UT':'America/Denver','VA':'America/New_York',
+  'VT':'America/New_York','WA':'America/Los_Angeles','WI':'America/Chicago','WV':'America/New_York',
+  'WY':'America/Denver','AK':'America/Anchorage','HI':'Pacific/Honolulu',
+};
+function tzForAirport(icao){
+  const a=AIRPORTS[icao];
+  if(a&&a.st) return STATE_TZ[a.st];
+  return 'America/New_York';
+}
+function toRad(d){return d*Math.PI/180}
+function toDeg(r){return r*180/Math.PI}
+function normDeg(d){return((d%360)+360)%360}
+
+function distNm(l1,n1,l2,n2){
+  const R=3440.065, dL=toRad(l2-l1), dN=toRad(n2-n1);
+  const a=Math.sin(dL/2)**2+Math.cos(toRad(l1))*Math.cos(toRad(l2))*Math.sin(dN/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function bearing(l1,n1,l2,n2){
+  const dN=toRad(n2-n1);
+  const y=Math.sin(dN)*Math.cos(toRad(l2));
+  const x=Math.cos(toRad(l1))*Math.sin(toRad(l2))-Math.sin(toRad(l1))*Math.cos(toRad(l2))*Math.cos(dN);
+  return normDeg(toDeg(Math.atan2(y,x)));
+}
+
+function toScreen(lat,lon){
+  const d=distNm(S.centerLat,S.centerLng,lat,lon);
+  const b=bearing(S.centerLat,S.centerLng,lat,lon);
+  const r=(d/S.maxRange)*S.rad, br=toRad(b);
+  return{x:S.cx+r*Math.sin(br),y:S.cy-r*Math.cos(br),dist:d,bearing:b};
+}
+
+// ===== MAP TILES =====
+function tileZoom(){const r=S.maxRange;return r<=15?12:r<=30?11:r<=60?10:9}
+
+function loadMapTiles(){
+  const z=tileZoom(), n=1<<z;
+  const rd=S.maxRange/60*1.25;
+  const lr=rd/Math.cos(toRad(S.centerLat));
+  const x0=Math.floor(n*(S.centerLng-lr+180)/360);
+  const x1=Math.floor(n*(S.centerLng+lr+180)/360);
+  const y0=Math.floor(n*(1-Math.log(Math.tan(toRad(S.centerLat+rd))+1/Math.cos(toRad(S.centerLat+rd)))/Math.PI)/2);
+  const y1=Math.floor(n*(1-Math.log(Math.tan(toRad(S.centerLat-rd))+1/Math.cos(toRad(S.centerLat-rd)))/Math.PI)/2);
+  const tiles=[];
+  S.mapTilesLoading=true;
+  tileStatus.textContent='loading '+(1+Math.abs(x1-x0))+'×'+(1+Math.abs(y1-y0))+' tiles…';
+  for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++){
+    const nx=((x%n)+n)%n, ny=n-1-y;
+    const img=new Image();
+    const t={x:nx,y,ny,z,img,ok:false};
+    img.onload=()=>{t.ok=true};
+    img.onerror=()=>{t.ok=false};
+    const tileY=S.mapSource==='vfr'?ny:y;
+    img.src=S.mapSource==='vfr'
+      ?'https://vfrmap.com/20260319/tiles/vfrc/'+z+'/'+tileY+'/'+nx+'.jpg'
+      :'https://tile.openstreetmap.org/'+z+'/'+nx+'/'+tileY+'.png';
+    tiles.push(t);
+  }
+  S.mapTiles=tiles;
+  S.bgDirty=true;
+  if(tiles.length===0){S.mapTilesLoading=false;tileStatus.textContent='no tiles';return}
+  const chk=setInterval(()=>{
+    const all=tiles.every(t=>t.img.complete);
+    if(!all) return;
+    clearInterval(chk);
+    S.mapTilesLoading=false;
+    S.bgDirty=true;
+    tileStatus.textContent='';
+  },100);
+  if(S.showWxRadar) loadWxRadarTiles();
+}
+
+function loadWxRadarTiles(){
+  const z=tileZoom(), n=1<<z;
+  const rd=S.maxRange/60*1.25;
+  const lr=rd/Math.cos(toRad(S.centerLat));
+  const x0=Math.floor(n*(S.centerLng-lr+180)/360);
+  const x1=Math.floor(n*(S.centerLng+lr+180)/360);
+  const y0=Math.floor(n*(1-Math.log(Math.tan(toRad(S.centerLat+rd))+1/Math.cos(toRad(S.centerLat+rd)))/Math.PI)/2);
+  const y1=Math.floor(n*(1-Math.log(Math.tan(toRad(S.centerLat-rd))+1/Math.cos(toRad(S.centerLat-rd)))/Math.PI)/2);
+  const tiles=[];
+  for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++){
+    const nx=((x%n)+n)%n, ny=n-1-y;
+    const img=new Image();
+    const t={x:nx,y,z,img,ok:false};
+    img.onload=()=>{t.ok=true};
+    img.onerror=()=>{t.ok=false};
+    img.src='https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q/'+z+'/'+nx+'/'+y+'.png';
+    tiles.push(t);
+  }
+  S.wxRadarTiles=tiles;
+  S.bgDirty=true;
+}
+
+function drawMapTiles(c){
+  c=c||ctx;
+  if(!S.mapTiles) return;
+  const n=1<<tileZoom();
+  let any=false;
+  for(const t of S.mapTiles) if(t.img.complete&&t.ok){any=true;break}
+  if(!any) return;
+  const mo=S.mapOpacity, bright=0.12+mo*0.38, overlayA=0.88-mo*0.68;
+  c.filter=S.mapSource==='vfr'
+    ?`brightness(${bright}) contrast(1.5)`
+    :`brightness(${bright}) contrast(1.2)`;
+  for(const t of S.mapTiles){
+    if(!t.img.complete||!t.ok) continue;
+    const lon0=t.x/n*360-180, lon1=(t.x+1)/n*360-180;
+    const lat1=toDeg(Math.atan(Math.sinh(Math.PI*(1-2*t.y/n))));
+    const lat0=toDeg(Math.atan(Math.sinh(Math.PI*(1-2*(t.y+1)/n))));
+    const nw=toScreen(lat1,lon0), se=toScreen(lat0,lon1);
+    const dw=se.x-nw.x, dh=se.y-nw.y;
+    if(dw>0&&dh>0) c.drawImage(t.img,nw.x,nw.y,dw,dh);
+  }
+  c.filter='none';
+  c.fillStyle=`rgba(${TC.overlayRGB},${overlayA})`;
+  c.fillRect(0,0,S.w,S.h);
+}
+
+function drawWxRadarTiles(c){
+  if(!S.wxRadarTiles||!S.wxRadarTiles.length) return;
+  const n=1<<tileZoom();
+  let any=false;
+  for(const t of S.wxRadarTiles) if(t.img.complete&&t.ok){any=true;break}
+  if(!any) return;
+  c.globalAlpha=S.wxRadarOpacity;
+  for(const t of S.wxRadarTiles){
+    if(!t.img.complete||!t.ok) continue;
+    const lon0=t.x/n*360-180, lon1=(t.x+1)/n*360-180;
+    const lat1=toDeg(Math.atan(Math.sinh(Math.PI*(1-2*t.y/n))));
+    const lat0=toDeg(Math.atan(Math.sinh(Math.PI*(1-2*(t.y+1)/n))));
+    const nw=toScreen(lat1,lon0), se=toScreen(lat0,lon1);
+    const dw=se.x-nw.x, dh=se.y-nw.y;
+    if(dw>0&&dh>0) c.drawImage(t.img,nw.x,nw.y,dw,dh);
+  }
+  c.globalAlpha=1;
+}
+
+// ===== AIRPORT / GEO OVERLAY =====
+function drawGeoOverlay(c){
+  c=c||ctx;
+  const{cx,cy,rad,mr}=S;
+  const clt=S.centerLat;
+  const cln=S.centerLng;
+  const latStep=S.maxRange<=15?0.05:S.maxRange<=40?0.1:0.2;
+  const lonStep=latStep/Math.cos(toRad(clt));
+  const rDeg=mr/60;
+  for(let lat=clt-rDeg;lat<=clt+rDeg;lat+=latStep){
+    const p=toScreen(lat,cln);
+    if(p.dist>mr*1.2) continue;
+    c.strokeStyle=TC.dim;
+    c.lineWidth=0.2;
+    c.beginPath();
+    const dy=Math.abs(p.y-cy);
+    const hw=dy<rad?Math.sqrt(rad*rad-dy*dy):0;
+    c.moveTo(cx-hw,p.y);c.lineTo(cx+hw,p.y);
+    c.stroke();
+  }
+  for(let lon=cln-rDeg/Math.cos(toRad(clt));lon<=cln+rDeg/Math.cos(toRad(clt));lon+=lonStep){
+    const p=toScreen(clt,lon);
+    if(p.dist>mr*1.2) continue;
+    c.strokeStyle=TC.dim;
+    c.lineWidth=0.2;
+    c.beginPath();
+    const dx=Math.abs(p.x-cx);
+    const hw=dx<rad?Math.sqrt(rad*rad-dx*dx):0;
+    c.moveTo(p.x,cy-hw);c.lineTo(p.x,cy+hw);
+    c.stroke();
+  }
+
+}
+
+// ===== AIRCRAFT =====
+function mkAircraft(cs,lat,lon,alt,hdg,spd,src){
+  return{id:S.nextId++,callsign:cs,lat,lon,alt,hdg,spd,src,type:'',reg:'',squawk:'',lastLit:-DECAY_MS*2,history:[],spdHistory:[]};
+}
+function aircraftBearing(ac){
+  const h=ac.history;
+  if(h.length>=2){const p=h[h.length-1],pp=h[h.length-2];return Math.atan2(p.lon-pp.lon,p.lat-pp.lat)*180/Math.PI}
+  if(h.length>=1){const p=h[h.length-1];return Math.atan2(ac.lon-p.lon,ac.lat-p.lat)*180/Math.PI}
+  return ac.hdg;
+}
+function avgSpd(ac){
+  const h=ac.spdHistory;
+  if(!h.length) return ac.spd;
+  let w=0,s=0;
+  for(let i=0;i<h.length;i++){const f=i+1;w+=f;s+=h[i]*f}
+  return s/w;
+}
+function scopeFont(ctx){ctx.font=S.fontStyle+' '+S.fontSize+'px '+S.fontFamily}
+  function altStr(a){
+  if(a>=18000) return'FL'+Math.round(a/1000)+'0';
+  return String(Math.round(a/100)).padStart(3,'0');
+}
+
+// ===== LIVE DATA =====
+let _fetchEpoch=0;
+
+function processAircraft(list){
+  if(!list||!list.length) return;
+  const now=performance.now();
+  for(const a of list){
+    if(a.lat==null||a.lon==null) continue;
+    if(typeof a.alt_baro==='string'||distNm(S.centerLat,S.centerLng,a.lat,a.lon)>S.maxRange*1.5) continue;
+    const hex=a.hex||(a.flight||'????').trim();
+    let ac=S.aircraft.find(x=>x.hex===hex);
+    if(!ac){
+      const al=typeof a.alt_baro==='number'?a.alt_baro:(a.alt_geom||35000);
+      let cs=(a.flight||'').trim();
+      if(!cs||/^[A-F0-9]{6}$/.test(cs)) cs=a.t||'---';
+      ac=mkAircraft(cs,a.lat,a.lon,Math.round(al),Math.round(a.track||0),Math.round(a.gs||0),'live');
+      ac.hex=hex; ac.lastSeen=now; ac.spotted=1;
+      ac.type=a.t||''; ac.reg=a.r||''; ac.squawk=a.squawk||'';
+      S.aircraft.push(ac);
+    }else{
+      if(Math.abs(ac.lat-a.lat)>1e-6||Math.abs(ac.lon-a.lon)>1e-6){
+        ac.history.push({lat:ac.lat,lon:ac.lon});
+        if(ac.history.length>50) ac.history.shift();
+      }
+      ac.lat=a.lat; ac.lon=a.lon;
+      ac.alt=Math.round(typeof a.alt_baro==='number'?a.alt_baro:(a.alt_geom||35000));
+      ac.hdg=Math.round(a.track||0); ac.spd=Math.round(a.gs||0);
+      ac.spdHistory.push(ac.spd); if(ac.spdHistory.length>6) ac.spdHistory.shift();
+      ac.lastSeen=now; ac.spotted=(ac.spotted||0)+1;
+      ac.type=a.t||ac.type; ac.reg=a.r||ac.reg; ac.squawk=a.squawk||ac.squawk||'';
+      const ncs=(a.flight||'').trim();
+      if(ncs&&!/^[A-F0-9]{6}$/.test(ncs)) ac.callsign=ncs;
+    }
+  }
+}
+
+async function fetchLiveData(){
+  const epoch=++_fetchEpoch;
+  const u=`/api/v3/lat/${S.centerLat}/lon/${S.centerLng}/dist/60?_=${Date.now()}`;
+  const r=await fetch(u,{signal:AbortSignal.timeout(API_TIMEOUT),cache:'no-store'});
+  if(!r||!r.ok) throw new Error('HTTP '+(r?r.status:'fail'));
+  if(epoch!==_fetchEpoch) return;
+  const raw=await r.text();
+  const d=JSON.parse(raw);
+  if(!d.ac||!d.ac.length) throw new Error('empty');
+  if(epoch!==_fetchEpoch) return;
+  processAircraft(d.ac);
+  if(epoch!==_fetchEpoch) return;
+  const now=performance.now();
+  S.aircraft=S.aircraft.filter(ac=>ac.src!=='live'||(now-ac.lastSeen)<60000);
+  // Auto-hide popup if selected target left scope
+  if(S.selected&&!S.aircraft.includes(S.selected)) hideTargetPopup();
+}
+
+async function fetchData(){
+  if(S.paused||S.fetching) return;
+  S.fetching=true;
+  const backoff=S.rateLimitBackoff;
+  if(backoff>0) await new Promise(r=>setTimeout(r,backoff));
+  S.lastFetch=performance.now();
+  try{
+    await fetchLiveData();
+    S.dataMode='live';
+    S.rateLimitBackoff=0;
+    if(!S.lastMetarFetch||Date.now()-S.lastMetarFetch>300000){fetchScopeWx()}
+  }catch(e){
+    const m=e.message;
+    if(m.includes('429')||m.includes('403')||m.includes('Too Many')){
+      S.rateLimitBackoff=Math.min((S.rateLimitBackoff||1000)*2,60000);
+    }
+  }
+  S.fetching=false;
+}
+
+// ===== CENTER =====
+function setCenter(q){
+  q=(q||'').toUpperCase().trim();
+  if(!q) return;
+  let apt=AIRPORTS[q], origQ=q;
+  if(!apt){
+    const found=Object.entries(AIRPORTS).find(([,a])=>
+      a.n.toUpperCase().includes(q)
+    );
+    if(found) apt=AIRPORTS[found[0]], q=found[0];
+  }
+  if(!apt){
+    const fa=S.airports.find(a=>a.icao===q||a.wxId===q);
+    if(fa) apt={lat:fa.lat,lon:fa.lon,n:fa.name,st:''}, q=fa.icao;
+  }
+  if(!apt){
+    const found=S.airports.find(a=>
+      a.name&&a.name.toUpperCase().includes(origQ)
+    );
+    if(found) apt={lat:found.lat,lon:found.lon,n:found.name,st:''}, q=found.icao;
+  }
+  if(!apt) return;
+  S.centerLat=apt.lat; S.centerLng=apt.lon;
+  S.currentAirport=q;
+  centerLabel.textContent=q+' · '+apt.n+(apt.st?', '+apt.st:'');
+  aptInput.value=q;
+  S.bgDirty=true;
+  S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,2000);
+  loadMapTiles();
+  autoShowLiveAtc();
+}
+
+aptGo.addEventListener('click',()=>setCenter(aptInput.value));
+aptInput.addEventListener('keydown',e=>{if(e.key==='Enter')setCenter(aptInput.value)});
+aptHome.addEventListener('click',()=>setCenter('KMSN'));
+
+// ===== RENDER =====
+function resize(){
+  const r=canvas.parentElement.getBoundingClientRect();
+  S.dpr=window.devicePixelRatio||1;
+  const w=r.width,h=r.height;
+  canvas.width=w*S.dpr; canvas.height=h*S.dpr;
+  canvas.style.width=w+'px'; canvas.style.height=h+'px';
+  S.w=w;S.h=h;S.cx=w/2;S.cy=h/2;S.rad=Math.min(w,h)/2-16;
+  S.bgDirty=true;
+}
+
+function drawBg(){
+  const{w,h,cx,cy,rad}=S;
+  bgCanvas.width=canvas.width;
+  bgCanvas.height=canvas.height;
+  bgCtx.setTransform(S.dpr,0,0,S.dpr,0,0);
+  bgCtx.fillStyle=TC.bg;
+  bgCtx.fillRect(0,0,w,h);
+  bgCtx.save();
+  bgCtx.beginPath();
+  bgCtx.arc(cx,cy,rad+2,0,Math.PI*2);
+  bgCtx.clip();
+  drawMapTiles(bgCtx);
+  if(S.showWxRadar) drawWxRadarTiles(bgCtx);
+  drawGeoOverlay(bgCtx);
+  const{mr}=S;
+  const r13=Math.round(mr/3), r23=Math.round(mr*2/3); const rings=[r13,r23,mr];
+  for(const r of rings){
+    const pr=(r/mr)*rad;
+    bgCtx.beginPath();
+    bgCtx.arc(cx,cy,pr,0,Math.PI*2);
+    bgCtx.strokeStyle=r===rings[rings.length-1]?TC.dim9:TC.dim7;
+    bgCtx.lineWidth=r===rings[rings.length-1]?1:0.8;
+    bgCtx.stroke();
+    const ul=-3*Math.PI/4;
+    const tx=cx+(pr+10)*Math.cos(ul), ty=cy+(pr+10)*Math.sin(ul);
+    bgCtx.save(); bgCtx.translate(tx,ty); bgCtx.rotate(ul+Math.PI/2);
+    bgCtx.font='bold 11px Consolas,Courier New,monospace';
+    bgCtx.fillStyle=TC.dim12;
+    bgCtx.textAlign='center'; bgCtx.textBaseline='middle';
+    bgCtx.fillText(r+'NM',0,0);
+    bgCtx.restore();
+  }
+  // Crosshairs (always green)
+  bgCtx.strokeStyle='rgba(0,255,51,0.45)'; bgCtx.lineWidth=1;
+  bgCtx.beginPath();
+  bgCtx.moveTo(cx,cy-rad); bgCtx.lineTo(cx,cy+rad);
+  bgCtx.moveTo(cx-rad,cy); bgCtx.lineTo(cx+rad,cy);
+  bgCtx.stroke();
+
+  for(let deg=0;deg<360;deg++){
+    const a=toRad(deg)-Math.PI/2;
+    const inner=deg%10===0?rad-14:deg%5===0?rad-8:rad-5;
+    bgCtx.beginPath();
+    bgCtx.moveTo(cx+rad*Math.cos(a),cy+rad*Math.sin(a));
+    bgCtx.lineTo(cx+inner*Math.cos(a),cy+inner*Math.sin(a));
+    bgCtx.strokeStyle=deg%90===0?TC.dim9:deg%10===0?TC.dim7:TC.dim3;
+    bgCtx.lineWidth=deg%90===0?1.2:deg%10===0?0.8:0.4;
+    bgCtx.stroke();
+  }
+  bgCtx.textAlign='center';bgCtx.textBaseline='middle';
+  bgCtx.font='bold 11px Consolas,Courier New,monospace';
+  bgCtx.fillStyle=TC.dim9;
+  for(let d=0;d<360;d+=30){
+    const a=toRad(d)-Math.PI/2;
+    bgCtx.fillText(String(d).padStart(3,'0'),cx+(rad-20)*Math.cos(a),cy+(rad-20)*Math.sin(a));
+  }
+  bgCtx.fillStyle='rgba(0,255,51,0.85)';
+  bgCtx.font='bold 13px Consolas,Courier New,monospace';
+  bgCtx.textAlign='center'; bgCtx.textBaseline='middle';
+  bgCtx.fillText('N',cx,cy-rad+12);
+  bgCtx.fillText('S',cx,cy+rad-12);
+  bgCtx.fillText('W',cx-rad+12,cy);
+  bgCtx.fillText('E',cx+rad-12,cy);
+  bgCtx.restore();
+}
+
+function render(ts){
+  if(!S.paused){
+    const dt=S.lastFrame?(ts-S.lastFrame)/1000:1/60;
+    S.lastFrame=ts;
+    S.sweepDeg=normDeg(S.sweepDeg+S.rpm*360/60*dt);
+    if(!S.fetching&&ts-S.lastFetch>API_INTERVAL) fetchData();
+    const sr=toRad(S.sweepDeg), br=toRad(BEAM_DEG);
+    for(const ac of S.aircraft){
+      const b=toRad(bearing(S.centerLat,S.centerLng,ac.lat,ac.lon));
+      let d=b-sr; if(d>Math.PI) d-=2*Math.PI; if(d<-Math.PI) d+=2*Math.PI;
+      if(Math.abs(d)<br) ac.lastLit=ts;
+    }
+  }
+
+  const{w,h,cx,cy,rad,mr}=S;
+
+  if(S.bgDirty){drawBg();S.bgDirty=false}
+
+  ctx.setTransform(S.dpr,0,0,S.dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  ctx.drawImage(bgCanvas,0,0,w,h);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx,cy,rad+2,0,Math.PI*2);
+  ctx.clip();
+
+  // Proximity detection — converging pairs within S.proxNm, ±S.proxFt
+  const proxSet=new Set();
+  const pn=S.proxNm, pf=S.proxFt;
+  for(let i=0;i<S.aircraft.length;i++){
+    for(let j=i+1;j<S.aircraft.length;j++){
+      const a=S.aircraft[i], b=S.aircraft[j];
+      const d=distNm(a.lat,a.lon,b.lat,b.lon);
+      if(d>pn*2||Math.abs(a.alt-b.alt)>pf) continue;
+      const n=Math.min(a.history.length,b.history.length,6);
+      if(n<2){if(d<=pn){proxSet.add(a);proxSet.add(b)};continue}
+      let sum=0, cnt=0;
+      for(let k=0;k<=n;k++){
+        const idx=n-k;
+        const hd=k===0?d:distNm(a.history[idx].lat,a.history[idx].lon,b.history[idx].lat,b.history[idx].lon);
+        sum+=hd; cnt++;
+      }
+      const avg=sum/cnt;
+      if(d<avg*0.92&&d<pn){proxSet.add(a);proxSet.add(b)}
+    }
+  }
+
+  // Trails — visible while data is fresh (60s), independent of sweep
+  for(const ac of S.aircraft){
+    const prox=proxSet.has(ac);
+    const sel=ac===S.selected;
+    const fresh=ts-ac.lastSeen<60000;
+    if(!sel&&(!fresh||ac.history.length<2)) continue;
+    if(ac.alt>0&&ac.alt>S.altFilter*100) continue;
+    const pos=toScreen(ac.lat,ac.lon);
+    if(pos.dist>mr*1.05) continue;
+    const al=sel?1:Math.max(0.2,1-(ts-ac.lastSeen)/60000);
+    let px=pos.x, py=pos.y;
+    ctx.save();
+    if(sel) ctx.shadowColor=TC.shadowSel;
+    if(sel) ctx.shadowBlur=10;
+    for(let i=ac.history.length-1;i>=0;i--){
+      const hp=toScreen(ac.history[i].lat,ac.history[i].lon);
+      if(hp.dist>mr) continue;
+      const t=i===ac.history.length-1?al:(i/ac.history.length)*al;
+      ctx.globalAlpha=Math.max(0.03,Math.max(0.05,t));
+      ctx.strokeStyle=prox?TC.fgProx:sel?TC.fgSel:TC.fg;
+      ctx.lineWidth=sel?3:prox?2.5:2;
+      ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(hp.x,hp.y);ctx.stroke();
+      ctx.beginPath();ctx.arc(hp.x,hp.y,sel?2.5:1.5,0,Math.PI*2);ctx.fill();
+      px=hp.x;py=hp.y;
+    }
+    ctx.restore();
+  }
+
+  // Sweep beam
+  {
+    const aL=toRad(S.sweepDeg)-Math.PI/2, aT=toRad(S.sweepDeg-BEAM_DEG)-Math.PI/2;
+    ctx.save();
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,rad,aT,aL,false);ctx.closePath();
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,rad);
+    g.addColorStop(0,TC.sweep1);
+    g.addColorStop(0.5,TC.sweep2);
+    g.addColorStop(1,TC.sweep3);
+    ctx.fillStyle=g;ctx.fill();
+    ctx.restore();
+  }
+
+  // Sweep line
+  {
+    const a=toRad(S.sweepDeg)-Math.PI/2;
+    const ex=cx+rad*Math.cos(a),ey=cy+rad*Math.sin(a);
+    ctx.save();
+    ctx.shadowColor=TC.shadow;ctx.shadowBlur=30;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(ex,ey);
+    ctx.strokeStyle=TC.light;ctx.lineWidth=2.5;
+    ctx.stroke();ctx.restore();
+  }
+
+  // Sweep endpoint
+  {
+    const a=toRad(S.sweepDeg)-Math.PI/2;
+    ctx.save();
+    ctx.shadowColor=TC.shadow;ctx.shadowBlur=40;
+    ctx.fillStyle=TC.light2;
+    ctx.beginPath();ctx.arc(cx+rad*Math.cos(a),cy+rad*Math.sin(a),4,0,Math.PI*2);
+    ctx.fill();ctx.restore();
+  }
+
+  // Airports (skip center airport — already shown by center label)
+  if(S.showAirports){
+    for(const ap of S.airports){
+      if(ap.icao===S.currentAirport||ap.wxId===S.currentAirport) continue;
+      const p=toScreen(ap.lat,ap.lon);
+      if(p.dist>S.maxRange) continue;
+      ctx.save();
+      ctx.strokeStyle=TC.dim9; ctx.lineWidth=0.7;
+      ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.stroke();
+      ctx.fillStyle=TC.dim8; ctx.beginPath(); ctx.arc(p.x,p.y,1.5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=TC.dim13;
+      ctx.font=S.fontStyle+' 9px '+S.fontFamily;
+      ctx.textAlign='left'; ctx.textBaseline='bottom';
+      ctx.fillText(ap.icao,p.x+5,p.y-2);
+      ctx.restore();
+    }
+  }
+
+  // Heading lines
+  for(const ac of S.aircraft){
+    const sel=ac===S.selected;
+    const age=sel?0:(ts-ac.lastLit)/DECAY_MS;
+    if(!sel&&age>3.5) continue;
+    if(ac.hdg==null) continue;
+    if(ac.alt>0&&ac.alt>S.altFilter*100) continue;
+    const pos=toScreen(ac.lat,ac.lon);
+    if(pos.dist>mr) continue;
+    const hdgLen=Math.min(rad*0.9, (avgSpd(ac)/30)*(rad/S.maxRange));
+    if(hdgLen<6) continue;
+    const aH=toRad(ac.hdg)-Math.PI/2;
+    const ex=pos.x+hdgLen*Math.cos(aH), ey=pos.y+hdgLen*Math.sin(aH);
+    ctx.save();
+    ctx.globalAlpha=sel?0.9:0.35;
+    ctx.strokeStyle=sel?TC.light3:TC.dim12;
+    ctx.lineWidth=sel?1.2:0.6;
+    ctx.setLineDash([3,4]);
+    ctx.beginPath();ctx.moveTo(pos.x,pos.y);ctx.lineTo(ex,ey);
+    ctx.stroke();ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // Blips + labels with collision avoidance
+  const labelQueue=[];
+  for(const ac of S.aircraft){
+    const prox=proxSet.has(ac);
+    const sel=ac===S.selected;
+    const age=sel?0:(ts-ac.lastLit)/DECAY_MS;
+    if(!sel&&age>3.5) continue;
+    if(ac.alt>0&&ac.alt>S.altFilter*100) continue;
+    if(ac.spd<S.minSpd) continue;
+    if(S.sqkFilter){const m=x=>x&&x.startsWith(S.sqkFilter);if(!m(ac.squawk)&&!m(ac.reg)&&!m(ac.callsign)) continue}
+    const pos=toScreen(ac.lat,ac.lon);
+    if(pos.dist>mr) continue;
+    const al=sel?1:Math.max(0.2,1-age);
+    const sz=sel?6:age<0.08?4.5:age<0.3?3.5:2.5;
+    ctx.save();
+    ctx.shadowColor=prox?TC.shadowProx:TC.shadow;
+    ctx.shadowBlur=sel?24:prox?18:age<0.08?22:10;
+    ctx.fillStyle=prox?TC.prox:sel?TC.shadowSel:TC.fg;
+    const bearing=aircraftBearing(ac);
+    ctx.globalAlpha=(sel?1:Math.min(1,al*1.2));
+    if(bearing!=null){
+      const aT=Math.PI/180*(bearing-90);
+      ctx.translate(pos.x,pos.y);
+      ctx.rotate(aT);
+      ctx.beginPath();
+      ctx.moveTo(sz*1.1,0);ctx.lineTo(-sz*0.7,-sz*0.7);ctx.lineTo(-sz*0.3,0);ctx.lineTo(-sz*0.7,sz*0.7);
+      ctx.closePath();ctx.fill();
+    }else{
+      ctx.fillRect(pos.x-sz/2,pos.y-sz/2,sz,sz);
+    }
+    ctx.restore();
+    if(S.showAllLabels?(sel||al>0.15):sel) labelQueue.push({ac,pos,sel,al,prox});
+  }
+  if(labelQueue.length){
+    scopeFont(ctx);
+    ctx.textAlign='left';ctx.textBaseline='top';
+    labelQueue.sort((a,b)=>b.sel-a.sel);
+    const placed=[];
+    const candidates=[
+      {dx:34,dy:-20},{dx:-34,dy:-20},{dx:34,dy:8},{dx:-34,dy:8},
+      {dx:34,dy:-4},{dx:-34,dy:-4},{dx:0,dy:-32},{dx:0,dy:16},
+    ];
+    for(const ld of labelQueue){
+      const{ac,pos,sel,al,prox}=ld;
+      const cw=ctx.measureText(ac.callsign).width;
+      const lw=Math.max(cw,ctx.measureText(altStr(ac.alt)).width,ctx.measureText(Math.round(ac.spd)+'KT').width)+6;
+      const lh=43;
+      let lx=pos.x+26, ly=pos.y-20;
+      for(const c of candidates){
+        const cx=Math.max(8,Math.min(w-lw-8,pos.x+c.dx));
+        const cy=Math.max(8,Math.min(h-lh-8,pos.y+c.dy));
+        let clash=false;
+        for(const p of placed){
+          if(cx<p.x+p.w&&cx+lw>p.x&&cy<p.y+p.h&&cy+lh>p.y){clash=true;break}
+        }
+        if(!clash){lx=cx;ly=cy;break}
+      }
+      placed.push({x:lx,y:ly,w:lw,h:lh});
+      ctx.save();
+      ctx.globalAlpha=(sel?1:Math.min(1,al*1.8));
+      ctx.strokeStyle=prox?TC.prox3:TC.dim7;ctx.lineWidth=0.7;
+      ctx.setLineDash([2,3]);
+      ctx.beginPath();ctx.moveTo(pos.x,pos.y);ctx.lineTo(lx+3,ly+lh/2);
+      ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle=prox?TC.prox2:sel?TC.light4:TC.dim13;
+      ctx.fillText(ac.callsign,lx+3,ly);
+      ctx.fillStyle=prox?TC.prox4:sel?TC.light3:TC.dim11;
+      ctx.fillText(altStr(ac.alt),lx+3,ly+15);
+      ctx.fillText(Math.round(ac.spd)+'KT',lx+3,ly+29);
+      ctx.restore();
+    }
+  }
+
+  // Center
+  ctx.save();
+  ctx.shadowColor=TC.shadow;ctx.shadowBlur=8;
+  ctx.strokeStyle=TC.dim10;ctx.lineWidth=0.7;
+  ctx.beginPath();ctx.arc(cx,cy,4,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx-7,cy);ctx.lineTo(cx+7,cy);
+  ctx.moveTo(cx,cy-7);ctx.lineTo(cx,cy+7);ctx.stroke();
+  ctx.fillStyle=TC.dim7;
+  ctx.font=S.fontStyle+' 9px '+S.fontFamily;
+  ctx.textAlign='left';ctx.textBaseline='bottom';
+  ctx.fillText(S.currentAirport,cx+9,cy-2);
+  ctx.restore();
+  ctx.restore();
+
+  const now=new Date();
+  const utcTime=now.toISOString().slice(11,19);
+  const tz=tzForAirport(S.currentAirport);
+  const localTime=now.toLocaleString('en-GB',{timeZone:tz,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  hudEl.innerHTML=`<span>${localTime}LT</span><span>${utcTime}Z</span>`;
+}
+
+// ===== CONTROLS =====
+let zoomTimer;
+zoomSlider.addEventListener('input',()=>{
+  S.maxRange=S.mr=parseInt(zoomSlider.value);
+  rangeVal.textContent=S.maxRange+' NM';
+  S.bgDirty=true;
+  clearTimeout(zoomTimer);
+  zoomTimer=setTimeout(()=>{S.lastMetarFetch=0;loadMapTiles();S.lastFetch=-10000;fetchData()},250);
+  saveSettings();
+});
+
+function setMapSource(src){
+  S.mapSource=src;
+  mapVfr.classList.toggle('on',src==='vfr');
+  mapOsm.classList.toggle('on',src==='osm');
+  loadMapTiles();
+  saveSettings();
+}
+mapVfr.addEventListener('click',()=>setMapSource('vfr'));
+mapOsm.addEventListener('click',()=>setMapSource('osm'));
+wxRadarToggle.addEventListener('click',()=>{
+  S.showWxRadar=!S.showWxRadar;
+  wxRadarToggle.classList.toggle('on',S.showWxRadar);
+  if(S.showWxRadar) loadWxRadarTiles();
+  else S.bgDirty=true;
+  saveSettings();
+});
+
+document.querySelectorAll('[data-theme-btn]').forEach(btn=>{
+  btn.addEventListener('click',()=>{applyTheme(btn.dataset.themeBtn);saveSettings()});
+});
+
+fontSettingsBtn.addEventListener('click',()=>fontPopup.classList.toggle('show'));
+fontPopupClose.addEventListener('click',()=>fontPopup.classList.remove('show'));
+helpBtn.addEventListener('click',()=>helpPopup.classList.toggle('show'));
+helpPopupClose.addEventListener('click',()=>helpPopup.classList.remove('show'));
+helpPopup.addEventListener('click',e=>{if(e.target===helpPopup)helpPopup.classList.remove('show')});
+
+const pauseBtn = document.getElementById('pause-btn');
+pauseBtn.addEventListener('click',()=>{
+  S.paused=!S.paused;
+  pauseBtn.classList.toggle('active',S.paused);
+  if(!S.paused){S.lastFrame=0;S.lastFetch=-10000;fetchData()}
+});
+
+fontColorPicker.addEventListener('input',()=>{
+  TC.fg=fontColorPicker.value;
+  const r=parseInt(TC.fg.slice(1,3),16), g=parseInt(TC.fg.slice(3,5),16), b=parseInt(TC.fg.slice(5,7),16);
+  const hex3=(c)=>Math.round(c).toString(16).padStart(2,'0');
+  TC.fgSel=`#${hex3(Math.min(255,r+60))}${hex3(Math.min(255,g+60))}${hex3(Math.min(255,b+60))}`;
+  TC.dim13=`rgba(${r},${g},${b},1)`;
+  TC.dim11=`rgba(${r},${g},${b},1)`;
+  TC.light3=`rgba(${Math.min(255,r+150)},${Math.min(255,g+150)},${Math.min(255,b+150)},0.8)`;
+  TC.light4=`#${hex3(Math.min(255,r+204))}${hex3(Math.min(255,g+204))}${hex3(Math.min(255,b+204))}`;
+  S.bgDirty=true;
+  saveSettings();
+});
+
+fontFamily.addEventListener('change',()=>{S.fontFamily=fontFamily.value;S.bgDirty=true;saveSettings()});
+
+fontSizeSlider.addEventListener('input',()=>{
+  S.fontSize=parseInt(fontSizeSlider.value);
+  fontSizeVal.textContent=S.fontSize;
+  S.bgDirty=true;
+  saveSettings();
+});
+
+fontStyleBtns.forEach(b=>b.addEventListener('click',()=>{
+  fontStyleBtns.forEach(x=>x.classList.toggle('on',x===b));
+  S.fontStyle=b.dataset.fontStyle;
+  S.bgDirty=true;
+  saveSettings();
+}));
+
+mapOpacitySlider.addEventListener('input',()=>{
+  S.mapOpacity=parseInt(mapOpacitySlider.value)/100;
+  mapOpacityVal.textContent=mapOpacitySlider.value+'%';
+  S.bgDirty=true;
+  saveSettings();
+});
+
+altFltSlider.addEventListener('input',()=>{
+  S.altFilter=parseInt(altFltSlider.value);
+  altFltVal.textContent=S.altFilter>=999?'FL999+':'FL'+S.altFilter;
+  saveSettings();
+});
+
+minSpdSlider.addEventListener('input',()=>{
+  S.minSpd=parseInt(minSpdSlider.value);
+  minSpdVal.textContent=S.minSpd+' KT';
+  saveSettings();
+});
+
+sqkFilter.addEventListener('input',()=>{
+  S.sqkFilter=sqkFilter.value.trim().toUpperCase();
+  saveSettings();
+});
+
+airportToggle.addEventListener('click',()=>{
+  S.showAirports=!S.showAirports;
+  airportToggle.classList.toggle('on',S.showAirports);
+  if(!S.showAirports){S.hoveredAirport=null;wxPopup.classList.remove('show')}
+  saveSettings();
+});
+
+const labelsToggle = document.getElementById('labels-toggle');
+labelsToggle.addEventListener('click',()=>{
+  S.showAllLabels=!S.showAllLabels;
+  labelsToggle.classList.toggle('on',S.showAllLabels);
+  saveSettings();
+});
+
+let scanningLiveAtc = false;
+
+
+proxNmSlider.addEventListener('input',()=>{
+  S.proxNm=parseFloat(proxNmSlider.value);
+  proxNmVal.textContent=S.proxNm+' NM';
+  saveSettings();
+});
+proxFtSlider.addEventListener('input',()=>{
+  S.proxFt=parseInt(proxFtSlider.value);
+  proxFtVal.textContent=S.proxFt+' FT';
+  saveSettings();
+});
+
+// ===== TARGET LIST =====
+function updList(){
+  const s=S.aircraft.filter(a=>a&&a.lat!=null&&typeof a.lat=='number').map(a=>({a,dist:distNm(S.centerLat,S.centerLng,a.lat,a.lon)})).sort((a,b)=>a.dist-b.dist);
+  if(!s.length){tgtList.innerHTML='<div class="empty">NO TARGETS</div>';tgtCount.textContent='0';return}
+  const v=s.filter(x=>{if(S.sqkFilter){const m=v=>v&&v.startsWith(S.sqkFilter);if(!m(x.a.squawk)&&!m(x.a.reg)&&!m(x.a.callsign)) return false}return x.dist<=S.maxRange&&x.a.spd>=S.minSpd});
+  tgtCount.textContent=v.length;
+  if(!v.length){tgtList.innerHTML='<div class="empty">NO TARGETS IN RANGE</div>';return}
+  let h='<table><thead><tr><th>C/S</th><th>NM</th><th>°</th><th>ALT</th><th>KT</th><th>HDG</th></tr></thead><tbody>';
+  for(const el of v){const a=el.a;if(!a)continue;const p=toScreen(a.lat,a.lon);const sel=a===S.selected;h+=`<tr class="${sel?'sel':''}" data-idx="${S.aircraft.indexOf(a)}"><td>${a.callsign}</td><td>${p.dist.toFixed(0)}</td><td>${Math.round(p.bearing)}</td><td>${altStr(a.alt)}</td><td>${Math.round(a.spd)}</td><td>${Math.round(a.hdg)}</td></tr>`}
+  tgtList.innerHTML=h+'</tbody></table>';
+  tgtList.querySelectorAll('tr[data-idx]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const idx=parseInt(el.dataset.idx);
+      const ac=S.aircraft[idx];
+      if(ac){S.selected=ac;showTargetInfo(ac);updList()}
+      hideTargetPopup();
+    });
+  });
+}
+
+// ===== TARGET INFO =====
+const infoEl=document.getElementById('target-info');
+
+function showTargetInfo(ac){
+  popupEl.classList.remove('show');
+  infoEl.innerHTML=`<span class="close" onclick="hideTargetInfo()">✕</span>`+
+    `<b>${ac.callsign}</b><br>`+
+    `<span class="l">Type:</span> <span class="v">${ac.type||'—'}</span><br>`+
+    `<span class="l">Reg:</span> <span class="v">${ac.reg||'—'}</span><br>`+
+    `<span class="l">Alt:</span> <span class="v">${altStr(ac.alt)}</span><br>`+
+    `<span class="l">Spd:</span> <span class="v">${Math.round(ac.spd)} KT</span><br>`+
+    `<span class="l">Hdg:</span> <span class="v">${Math.round(ac.hdg)}°</span><br>`+
+    `<span class="l">Src:</span> <span class="v">${ac.src.toUpperCase()}</span><br>`+
+    (ac.squawk?`<span class="l">Squawk:</span> <span class="v">${ac.squawk}</span><br>`:'');
+  infoEl.classList.add('show');
+}
+
+function positionPopup(cx, cy){
+  const wrap=document.getElementById('radar-wrap');
+  const wr=wrap.getBoundingClientRect();
+  let left=cx-wr.left+10, top=cy-wr.top+10;
+  const pw=200, ph=220;
+  if(left+pw>wr.width) left=wr.width-pw-10;
+  if(left<10) left=10;
+  if(top+ph>wr.height) top=wr.height-ph-10;
+  if(top<10) top=10;
+  popupEl.style.left=left+'px';
+  popupEl.style.top=top+'px';
+}
+
+function hideTargetPopup(){
+  popupEl.classList.remove('show');
+  S.selected=null;
+  updList();
+}
+
+function hideTargetInfo(){
+  infoEl.classList.remove('show');
+  S.selected=null;
+  updList();
+}
+
+function playAtc(btn,stream){
+  const p=document.getElementById('atc-player');
+  if(!p) return;
+  const wasPlaying=btn.classList.contains('playing');
+  p.innerHTML='';
+  document.querySelectorAll('.atc-btn').forEach(b=>b.classList.remove('playing'));
+  if(wasPlaying) return;
+  btn.classList.add('playing');
+  const a=document.createElement('audio');
+  a.controls=true; a.autoplay=true;
+  a.src='https://d.liveatc.net/'+stream;
+   a.onerror=()=>{a.remove();btn.classList.remove('playing');p.innerHTML=`<span style="color:${TC.error};font-size:10px">Stream unavailable</span>`};
+  p.appendChild(a);
+}
+
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const px=(e.clientX-r.left)/r.width*S.w;
+  const py=(e.clientY-r.top)/r.height*S.h;
+  if(S.showAirports){
+    for(const ap of S.airports){
+      const p=toScreen(ap.lat,ap.lon);
+      if(p.dist>S.maxRange) continue;
+      const d=Math.hypot(p.x-px,p.y-py);
+      if(d<12){
+        showAirportLiveAtc(ap);
+        return;
+      }
+    }
+  }
+  let best=null, bestD=16;
+  for(const ac of S.aircraft){
+    const p=toScreen(ac.lat,ac.lon);
+    const d=Math.hypot(p.x-px,p.y-py);
+    if(d<bestD){bestD=d;best=ac}
+  }
+  if(best){S.selected=best;showTargetInfo(best);return}
+  hideTargetPopup();
+});
+
+canvas.addEventListener('mousemove',e=>{
+  const r=canvas.getBoundingClientRect();
+  const px=(e.clientX-r.left)/r.width*S.w;
+  const py=(e.clientY-r.top)/r.height*S.h;
+  const aps=S.airports.filter(a=>S.showAirports);
+  let best=null, bestD=12;
+  for(const ap of aps){
+    const p=toScreen(ap.lat,ap.lon);
+    const d=Math.hypot(p.x-px,p.y-py);
+    if(p.dist<=S.maxRange&&d<bestD){bestD=d;best=ap}
+  }
+  if(best&&best!==S.hoveredAirport){
+    S.hoveredAirport=best;
+    fetchWx(best).then(w=>{
+      if(S.hoveredAirport!==best) return;
+      let metar=w.metar, src='';
+      if(!metar){
+        let closest=null, cd=Infinity;
+        for(const k in S.wxCache){
+          if(!S.wxCache[k].metar||k===(best.wxId||best.icao)||!S.wxCache[k].lat) continue;
+          const d=distNm(best.lat,best.lon,S.wxCache[k].lat,S.wxCache[k].lon);
+          if(d<cd){cd=d;closest=k}
+        }
+        if(closest){
+          metar=S.wxCache[closest].metar;
+          const apt=S.airports.find(a=>a.wxId===closest||a.icao===closest);
+          src=apt?apt.icao:closest;
+        }
+      }
+      wxPopup.innerHTML=`<div class="h">${best.icao} ${best.name||''}</div>`+
+        (metar?`<div class="m">${metar}</div>`+(src?`<div style="opacity:0.35;font-size:9px">via ${src}</div>`:''):'<div class="m" style="opacity:0.4">No METAR</div>')+
+        (w.taf?`<div class="t">${w.taf}</div>`:'');
+      wxPopup.style.left=(e.clientX+12)+'px';
+      wxPopup.style.top=(e.clientY-10)+'px';
+      wxPopup.classList.add('show');
+    });
+  }else if(!best){
+    S.hoveredAirport=null;
+    wxPopup.classList.remove('show');
+  }
+});
+
+// ===== PERSIST =====
+const PERSIST_KEYS=['theme','maxRange','mapOpacity','altFilter','minSpd','sqkFilter','fontFamily','fontSize','fontStyle','fontColor','mapSource','showWxRadar','showAirports','showAllLabels','proxNm','proxFt'];
+function saveSettings(){
+  const o={};
+  for(const k of PERSIST_KEYS) o[k]=S[k];
+  o.fontColor=fontColorPicker.value;
+  try{localStorage.setItem('adsb-radar-settings',JSON.stringify(o))}catch(e){}
+}
+function loadSettings(){
+  try{
+    const raw=localStorage.getItem('adsb-radar-settings');
+    if(!raw) return;
+    const o=JSON.parse(raw);
+    for(const k of PERSIST_KEYS) if(o[k]!=null) S[k]=o[k];
+    // sync font color
+    if(o.fontColor){
+      fontColorPicker.value=o.fontColor;
+      // trigger color update
+      TC.fg=fontColorPicker.value;
+      const r=parseInt(TC.fg.slice(1,3),16), g=parseInt(TC.fg.slice(3,5),16), b=parseInt(TC.fg.slice(5,7),16);
+      const hex3=(c)=>Math.round(c).toString(16).padStart(2,'0');
+      TC.fgSel=`#${hex3(Math.min(255,r+60))}${hex3(Math.min(255,g+60))}${hex3(Math.min(255,b+60))}`;
+      TC.dim13=`rgba(${r},${g},${b},1)`;
+      TC.dim11=`rgba(${r},${g},${b},1)`;
+      TC.light3=`rgba(${Math.min(255,r+150)},${Math.min(255,g+150)},${Math.min(255,b+150)},0.8)`;
+      TC.light4=`#${hex3(Math.min(255,r+204))}${hex3(Math.min(255,g+204))}${hex3(Math.min(255,b+204))}`;
+      S.bgDirty=true;
+    }
+    // sync UI controls
+    zoomSlider.value=S.maxRange; rangeVal.textContent=S.maxRange+' NM';
+    mapOpacitySlider.value=Math.round(S.mapOpacity*100); mapOpacityVal.textContent=Math.round(S.mapOpacity*100)+'%';
+    altFltSlider.value=S.altFilter; altFltVal.textContent=S.altFilter>=999?'FL999+':'FL'+S.altFilter;
+    minSpdSlider.value=S.minSpd; minSpdVal.textContent=S.minSpd+' KT';
+    sqkFilter.value=S.sqkFilter||'';
+    fontFamily.value=S.fontFamily; fontSizeSlider.value=S.fontSize; fontSizeVal.textContent=S.fontSize;
+    fontStyleBtns.forEach(b=>b.classList.toggle('on',b.dataset.fontStyle===S.fontStyle));
+    mapVfr.classList.toggle('on',S.mapSource==='vfr'); mapOsm.classList.toggle('on',S.mapSource==='osm');
+    wxRadarToggle.classList.toggle('on',S.showWxRadar);
+    airportToggle.classList.toggle('on',S.showAirports);
+    labelsToggle.classList.toggle('on',S.showAllLabels);
+    proxNmSlider.value=S.proxNm; proxNmVal.textContent=S.proxNm+' NM';
+    proxFtSlider.value=S.proxFt; proxFtVal.textContent=S.proxFt+' FT';
+    S.mr=S.maxRange;
+  }catch(e){}
+}
+
+// ===== MAIN =====
+let _frame=0;
+function loop(t){try{render(t)}catch(e){console.warn('render',e)};if(++_frame%2===0)updList();requestAnimationFrame(loop)}
+function init(){
+  // load theme first so applyTheme uses the saved theme
+  try{const r=localStorage.getItem('adsb-radar-settings');if(r){const o=JSON.parse(r);if(o.theme)S.theme=o.theme}}catch(e){}
+  applyTheme(S.theme||'green-scope');
+  loadSettings();
+  resize();
+  window.addEventListener('resize',resize);
+  new ResizeObserver(resize).observe(canvas.parentElement);
+  fetchData();
+  loadMapTiles();
+  fetchScopeWx();
+  centerLabel.textContent='KMSN · Dane County Regional, WI';
+  setTimeout(autoShowLiveAtc, 500);
+  loop(0);
+}
+init();
+</script>
+</body>
+</html>
