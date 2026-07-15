@@ -1,5 +1,5 @@
-FROM python:3-alpine
+FROM python:3-slim
 WORKDIR /app
-COPY radar.html server.py /app/
+COPY server.py radar.html .
 EXPOSE 8080
-CMD ["python", "server.py"]
+CMD ["python3", "server.py"]

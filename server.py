@@ -1,62 +1,190 @@
-import http.server
-import urllib.request
-import urllib.error
-import json
-import os
-import sys
+#!/usr/bin/env python3
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+from urllib.error import HTTPError
+import os, json, time, csv, io, re
 
-ADSB_API = 'https://opendata.adsb.fi'
-LIVEATC_API = 'https://www.liveatc.net'
-PORT = int(os.environ.get('PORT', 8080))
+PROXY_TARGET = 'https://opendata.adsb.fi'
+WX_HOST = 'www.aviationweather.gov'
 
+_liveatc_cache = {}
+_last_search_time = 0
 
-class ProxyHandler(http.server.SimpleHTTPRequestHandler):
+_airport_types = {}
+_airport_types_ts = 0
+
+def _load_airport_types():
+    global _airport_types, _airport_types_ts
+    now = time.time()
+    if _airport_types and now - _airport_types_ts < 86400:
+        return
+    try:
+        resp = urlopen('https://davidmegginson.github.io/ourairports-data/airports.csv', timeout=15)
+        text = resp.read().decode('utf-8')
+        reader = csv.DictReader(io.StringIO(text))
+        types = {}
+        for row in reader:
+            icao = (row.get('ident') or '').strip().upper()
+            t = (row.get('type') or '').strip()
+            if icao and t:
+                types[icao] = t
+        _airport_types = types
+        _airport_types_ts = now
+        print(f'Loaded {len(types)} airport types from OurAirports')
+    except Exception as e:
+        print(f'Failed to load airport types: {e}')
+
+class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/api/v3/'):
-            self.proxy(ADSB_API + self.path)
-        elif self.path.startswith('/api/liveatc/'):
-            icao = self.path.split('/')[-1]
-            url = f'{LIVEATC_API}/ajax/get_audio.php?icao={icao}'
-            self.proxy(url, is_liveatc=True)
-        else:
-            super().do_GET()
-
-    def proxy(self, url, is_liveatc=False):
-        try:
-            req = urllib.request.Request(url, headers={
+            target = PROXY_TARGET + self.path.split('?')[0]
+            qs = self.path.split('?', 1)[1] if '?' in self.path else ''
+            if qs:
+                target += '?' + qs
+            req = Request(target, headers={
                 'User-Agent': 'Mozilla/5.0',
                 'Accept': 'application/json',
             })
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = resp.read()
-                self.send_response(resp.status)
+            try:
+                with urlopen(req, timeout=15) as resp:
+                    data = resp.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
-                if is_liveatc:
-                    self.send_header('Content-Type', 'application/json')
-                else:
-                    ct = resp.headers.get('Content-Type', 'application/json')
-                    self.send_header('Content-Type', ct)
-                self.send_header('Content-Length', str(len(data)))
+                self.send_header('Cache-Control', 'no-store')
                 self.end_headers()
                 self.wfile.write(data)
-        except urllib.error.HTTPError as e:
-            self.send_response(e.code)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps({'error': str(e)}).encode())
-        except Exception as e:
-            self.send_response(502)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps({'error': str(e)}).encode())
+            except Exception as e:
+                self.send_response(502)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(f'Proxy error: {e}'.encode())
+            return
+        if self.path.startswith('/api/data/'):
+            target = 'https://' + WX_HOST + self.path
+            try:
+                with urlopen(target, timeout=10) as resp:
+                    data = resp.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception as e:
+                self.send_response(502)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(f'Wx proxy error: {e}'.encode())
+            return
+        if self.path.startswith('/api/liveatc/'):
+            icao = self.path.split('/api/liveatc/')[1].split('?')[0].strip().lower()
+            if not icao:
+                self.send_json({'feeds': []})
+                return
+            self.handle_liveatc(icao)
+            return
+        if self.path == '/api/airport-types':
+            _load_airport_types()
+            self.send_json(_airport_types)
+            return
+        super().do_GET()
 
-    def log_message(self, fmt, *args):
-        sys.stderr.write(f'[server] {args[0]} {args[1]} {args[2]}\n')
+    def send_json(self, data):
+        body = json.dumps(data).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(body)
 
+    def handle_liveatc(self, icao):
+        global _liveatc_cache, _last_search_time
+        now = time.time()
+        if icao in _liveatc_cache and now - _liveatc_cache[icao][0] < 3600:
+            self.send_json(_liveatc_cache[icao][1])
+            return
+
+        ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        headers = {'User-Agent': ua}
+
+        def parse_pls(text):
+            result = []
+            files, titles = {}, {}
+            for line in text.split('\n'):
+                line = line.strip()
+                if line.startswith('File'):
+                    parts = line.split('=', 1)
+                    if len(parts) == 2:
+                        idx = parts[0].replace('File', '')
+                        files[idx] = parts[1].strip()
+                elif line.startswith('Title'):
+                    parts = line.split('=', 1)
+                    if len(parts) == 2:
+                        idx = parts[0].replace('Title', '')
+                        titles[idx] = parts[1].strip()
+            for idx in sorted(files):
+                url_val = files[idx]
+                name = titles.get(idx, '')
+                sid = url_val.rsplit('/', 1)[-1].split('?')[0]
+                if sid:
+                    result.append({'label': name, 'streamId': sid})
+            return result
+
+        all_feeds = []
+        seen = set()
+
+        for mount in [icao, f'{icao}_twr', f'{icao}_app', f'{icao}_gnd', f'{icao}_dep',
+                      f'{icao}_1', f'{icao}_2', f'{icao}_3', f'{icao}_4',
+                      f'{icao}1_twr', f'{icao}1_gnd', f'{icao}1_app', f'{icao}1_atis',
+                      f'{icao}1_gnd_twr', f'{icao}_gnd_twr']:
+            try:
+                pr = urlopen(Request(f'https://www.liveatc.net/play/{mount}.pls', headers=headers),
+                             timeout=5)
+                body = pr.read().decode('utf-8')
+                if 'File1=' in body:
+                    for f in parse_pls(body):
+                        if f['streamId'] not in seen:
+                            seen.add(f['streamId'])
+                            all_feeds.append(f)
+            except Exception:
+                pass
+
+        if _last_search_time + 2.5 < now:
+            _last_search_time = now
+            try:
+                r = urlopen(Request(f'https://www.liveatc.net/search/?icao={icao}', headers=headers),
+                            timeout=10)
+                body = r.read().decode('utf-8')
+                mounts = re.findall(r'play/([a-z0-9_]+)\.pls', body)
+                for mount in mounts:
+                    if mount not in seen:
+                        seen.add(mount)
+                        try:
+                            pr = urlopen(Request(f'https://www.liveatc.net/play/{mount}.pls', headers=headers),
+                                         timeout=5)
+                            pbody = pr.read().decode('utf-8')
+                            if 'File1=' in pbody:
+                                for line in pbody.split('\n'):
+                                    line = line.strip()
+                                    if line.startswith('Title'):
+                                        parts = line.split('=', 1)
+                                        if len(parts) == 2:
+                                            all_feeds.append({'label': parts[1].strip(), 'streamId': mount})
+                                            break
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+        result = {'feeds': all_feeds}
+        _liveatc_cache[icao] = (now, result)
+        self.send_json(result)
 
 if __name__ == '__main__':
-    httpd = http.server.HTTPServer(('0.0.0.0', PORT), ProxyHandler)
-    print(f'ADS-B Radar server on port {PORT}')
-    httpd.serve_forever()
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    port = int(os.environ.get('PORT', 8080))
+    server = HTTPServer(('', port), Handler)
+    print(f'Serving at http://localhost:{port}')
+    server.serve_forever()
