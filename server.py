@@ -5,7 +5,7 @@ import json
 import os
 import sys
 
-ADSB_API = 'https://adsb.lol'
+ADSB_API = 'https://opendata.adsb.fi'
 LIVEATC_API = 'https://www.liveatc.net'
 PORT = int(os.environ.get('PORT', 8080))
 
