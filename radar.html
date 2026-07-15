@@ -37,7 +37,7 @@
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:'Consolas','Courier New',monospace;color:var(--fg);user-select:none;-webkit-font-smoothing:antialiased}
 #app{display:flex;width:100%;height:100%}
 #radar-wrap{flex:1;position:relative;min-width:0;overflow:hidden}
-#radar-wrap canvas{display:block;position:absolute;top:0;left:0;width:100%;height:100%}
+#radar-wrap canvas{display:block;position:absolute;top:0;left:0;width:100%;height:100%;cursor:grab;touch-action:none}
 #range-overlay{position:absolute;bottom:10px;right:10px;z-index:5;display:flex;flex-direction:column;align-items:stretch;gap:3px;background:color-mix(in srgb,var(--bg2) 75%,transparent);border:1px solid var(--border2);border-radius:3px;padding:4px 8px;min-width:90px}
 #range-overlay .ro-hdr{display:flex;justify-content:space-between;align-items:center}
 #range-overlay label{font-size:10px;color:var(--fg-muted2);letter-spacing:0.5px;text-transform:uppercase}
@@ -987,10 +987,10 @@ function drawBg(){
   bgCtx.fillStyle='rgba(0,255,51,0.85)';
   bgCtx.font='bold 13px Consolas,Courier New,monospace';
   bgCtx.textAlign='center'; bgCtx.textBaseline='middle';
-  bgCtx.fillText('N',cx,cy-rad+12);
-  bgCtx.fillText('S',cx,cy+rad-12);
-  bgCtx.fillText('W',cx-rad+12,cy);
-  bgCtx.fillText('E',cx+rad-12,cy);
+  bgCtx.fillText('N',cx,cy-rad+34);
+  bgCtx.fillText('S',cx,cy+rad-34);
+  bgCtx.fillText('W',cx-rad+34,cy);
+  bgCtx.fillText('E',cx+rad-34,cy);
   bgCtx.restore();
 }
 
@@ -1379,7 +1379,7 @@ function updList(){
       const idx=parseInt(el.dataset.idx);
       const ac=S.aircraft[idx];
       if(ac){S.selected=ac;showTargetInfo(ac);updList()}
-      hideTargetPopup();
+      popupEl.classList.remove('show');
     });
   });
 }
@@ -1441,7 +1441,94 @@ function playAtc(btn,stream){
   p.appendChild(a);
 }
 
+// ===== PAN STATE =====
+let pan={active:false,moved:false,sx:0,sy:0,clat:0,clng:0};
+
+function endPan(){
+  if(!pan.active) return;
+  pan.active=false;
+  canvas.style.cursor='';
+  if(pan.moved){
+    S.currentAirport='';
+    centerLabel.textContent='Pan · '+(S.currentAirport||'');
+    S.bgDirty=true;
+    S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,2000);
+    loadMapTiles();
+  }
+}
+
+canvas.addEventListener('mousedown',e=>{
+  if(e.button!==0) return;
+  const r=canvas.getBoundingClientRect();
+  pan.sx=(e.clientX-r.left)/r.width*S.w;
+  pan.sy=(e.clientY-r.top)/r.height*S.h;
+  pan.clat=S.centerLat; pan.clng=S.centerLng;
+  pan.moved=false; pan.active=true;
+  canvas.style.cursor='grabbing';
+});
+
+canvas.addEventListener('mousemove',e=>{
+  if(pan.active){
+    const r=canvas.getBoundingClientRect();
+    const px=(e.clientX-r.left)/r.width*S.w;
+    const py=(e.clientY-r.top)/r.height*S.h;
+    const dx=px-pan.sx, dy=py-pan.sy;
+    if(Math.abs(dx)>3||Math.abs(dy)>3) pan.moved=true;
+    if(pan.moved){
+      const nmPerPx=S.maxRange/S.rad;
+      const dLat=dy*nmPerPx/60;
+      const dLng=-dx*nmPerPx/(60*Math.cos(toRad(S.centerLat)));
+      S.centerLat=pan.clat+dLat; S.centerLng=pan.clng+dLng;
+      S.bgDirty=true;
+    }
+    return;
+  }
+  const r=canvas.getBoundingClientRect();
+  const px=(e.clientX-r.left)/r.width*S.w;
+  const py=(e.clientY-r.top)/r.height*S.h;
+  const aps=S.airports.filter(a=>S.showAirports);
+  let best=null, bestD=12;
+  for(const ap of aps){
+    const p=toScreen(ap.lat,ap.lon);
+    const d=Math.hypot(p.x-px,p.y-py);
+    if(p.dist<=S.maxRange&&d<bestD){bestD=d;best=ap}
+  }
+  if(best&&best!==S.hoveredAirport){
+    S.hoveredAirport=best;
+    fetchWx(best).then(w=>{
+      if(S.hoveredAirport!==best) return;
+      let metar=w.metar, src='';
+      if(!metar){
+        let closest=null, cd=Infinity;
+        for(const k in S.wxCache){
+          if(!S.wxCache[k].metar||k===(best.wxId||best.icao)||!S.wxCache[k].lat) continue;
+          const d=distNm(best.lat,best.lon,S.wxCache[k].lat,S.wxCache[k].lon);
+          if(d<cd){cd=d;closest=k}
+        }
+        if(closest){
+          metar=S.wxCache[closest].metar;
+          const apt=S.airports.find(a=>a.wxId===closest||a.icao===closest);
+          src=apt?apt.icao:closest;
+        }
+      }
+      wxPopup.innerHTML=`<div class="h">${best.icao} ${best.name||''}</div>`+
+        (metar?`<div class="m">${metar}</div>`+(src?`<div style="opacity:0.35;font-size:9px">via ${src}</div>`:''):'<div class="m" style="opacity:0.4">No METAR</div>')+
+        (w.taf?`<div class="t">${w.taf}</div>`:'');
+      wxPopup.style.left=(e.clientX+12)+'px';
+      wxPopup.style.top=(e.clientY-10)+'px';
+      wxPopup.classList.add('show');
+    });
+  }else if(!best){
+    S.hoveredAirport=null;
+    wxPopup.classList.remove('show');
+  }
+});
+
+canvas.addEventListener('mouseup',endPan);
+canvas.addEventListener('mouseleave',endPan);
+
 canvas.addEventListener('click',e=>{
+  if(pan.moved) return;
   const r=canvas.getBoundingClientRect();
   const px=(e.clientX-r.left)/r.width*S.w;
   const py=(e.clientY-r.top)/r.height*S.h;
@@ -1507,6 +1594,25 @@ canvas.addEventListener('mousemove',e=>{
     wxPopup.classList.remove('show');
   }
 });
+
+// ===== PINCH / SCROLL ZOOM =====
+let zoomThrottle=0;
+canvas.addEventListener('wheel',e=>{
+  if(!e.ctrlKey&&!e.metaKey) return;
+  e.preventDefault();
+  const now=Date.now();
+  if(now-zoomThrottle<250) return;
+  zoomThrottle=now;
+  const dir=e.deltaY>0||e.deltaX>0?1:-1;
+  let r=S.maxRange+dir*5;
+  r=Math.max(15,Math.min(100,Math.round(r/5)*5));
+  if(r===S.maxRange) return;
+  S.maxRange=r; S.mr=r;
+  zoomSlider.value=r; rangeVal.textContent=r+' NM';
+  S.bgDirty=true;
+  S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,2000);
+  loadMapTiles();
+},{passive:false});
 
 // ===== PERSIST =====
 const PERSIST_KEYS=['theme','maxRange','mapOpacity','altFilter','minSpd','sqkFilter','fontFamily','fontSize','fontStyle','fontColor','mapSource','showWxRadar','showAirports','showAllLabels','proxNm','proxFt'];
