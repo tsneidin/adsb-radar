@@ -358,7 +358,6 @@ async function loadAirports(){
     S.airports=ap;
     console.log('airports loaded',ap.length);
   }catch(e){console.error('airport load error',e)}
-  if(!S.airports||!S.airports.length){
   console.log('airports ready:',S.airports.length);
 }
 loadAirports();
