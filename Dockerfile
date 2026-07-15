@@ -1,3 +1,5 @@
-FROM nginx:alpine
-COPY radar.html /usr/share/nginx/html/index.html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+FROM python:3-alpine
+WORKDIR /app
+COPY radar.html server.py /app/
+EXPOSE 8080
+CMD ["python", "server.py"]
