@@ -788,6 +788,7 @@ function setCenter(q){
   centerLabel.textContent=q+' · '+fa.name+(fa.state?', '+fa.state:'');
   aptInput.value=q;
   S.bgDirty=true;
+  S.lastMetarFetch=0;
   S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,2000);
   loadMapTiles();
   autoShowLiveAtc();
@@ -1332,6 +1333,7 @@ function endPan(){
     S.currentAirport='';
     centerLabel.textContent='Pan · '+(S.currentAirport||'');
     S.bgDirty=true;
+    S.lastMetarFetch=0;
     S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,2000);
     loadMapTiles();
   }
