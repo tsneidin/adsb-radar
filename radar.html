@@ -346,18 +346,34 @@ function autoShowLiveAtc(){
 }
 
 // ===== AIRPORT DATA LOADER =====
+function parseCsvLine(l){
+  const r=[];let f='',q=false;
+  for(let i=0;i<l.length;i++){
+    const c=l[i];
+    if(q){if(c==='"'){if(l[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true
+    else if(c===','){r.push(f);f=''}
+    else f+=c;
+  }
+  r.push(f);return r;
+}
 async function loadAirports(){
   try{
-    const mod=await import('https://cdn.jsdelivr.net/npm/@squawk/airport-data@0.7.10/dist/browser.js');
-    const dataset=await mod.loadUsBundledAirports();
+    const res=await fetch('https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat');
+    const txt=await res.text();
     const ap=[];
-    for(const r of dataset.records){
-      if(r.country!=='US') continue;
-      if(r.facilityType!=='AIRPORT') continue;
-      if(r.useType!=='PUBLIC') continue;
-      if(!r.fuelTypes) continue;
-      const wxId=r.icao||(r.faaId.length===3&&/^[A-Z]/.test(r.faaId)?'K'+r.faaId:r.faaId);
-      ap.push({icao:r.faaId,lat:r.lat,lon:r.lon,name:r.name,state:r.state,timezone:r.timezone,wxId,metar:'',taf:'',runways:r.runways});
+    for(const line of txt.split('\n')){
+      const c=parseCsvLine(line);
+      if(c.length<6) continue;
+      const icao=c[5]; if(!icao||icao==='\\N'||icao.length<3) continue;
+      const lat=parseFloat(c[6]); if(isNaN(lat)) continue;
+      const lon=parseFloat(c[7]); if(isNaN(lon)) continue;
+      const name=c[1];
+      const country=c[3];
+      const state=country;
+      const tz=c[11];
+      const wxId=icao;
+      ap.push({icao,lat,lon,name,state,timezone:tz,wxId,metar:'',taf:'',runways:null});
     }
     S.airports=ap;
     console.log('airports loaded',ap.length);
