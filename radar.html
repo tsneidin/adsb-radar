@@ -257,7 +257,7 @@ const NM_PER_DEG = 60;
 const BEAM_DEG = 2.5;
 const DECAY_MS = 18750;
 const API_TIMEOUT = 10000;
-const API_INTERVAL = 6000;
+const API_INTERVAL = 3000;
 
 // ===== DOM =====
 const canvas = document.getElementById('c');
@@ -1376,7 +1376,8 @@ function movePan(e){
   pan.moved=true;
   S.bgDirty=true;
   S.currentAirport='';
-  centerLabel.textContent='Pan ·';
+  centerLabel.textContent='';
+  aptInput.value='';
 }
 
 function endPan(e){
@@ -1548,7 +1549,7 @@ function init(){
   {
     const ap=S.airports.find(a=>a.lat===S.centerLat&&a.lon===S.centerLng);
     if(ap){S.currentAirport=ap.icao;centerLabel.textContent=ap.icao+(ap.state?' · '+ap.name+', '+ap.state:' · '+ap.name);aptInput.value=ap.icao}
-    else{centerLabel.textContent='Pan ·';S.currentAirport=''}
+    else{centerLabel.textContent='';S.currentAirport=''}
   }
   fetchData();
   loadMapTiles();
