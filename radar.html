@@ -1046,7 +1046,7 @@ function render(ts){
     if(!sel&&age>3.5) continue;
     if(ac.alt>0&&ac.alt>S.altFilter*100) continue;
     if(ac.spd<S.minSpd) continue;
-    if(S.sqkFilter){const m=x=>x&&x.startsWith(S.sqkFilter);if(!m(ac.squawk)&&!m(ac.reg)&&!m(ac.callsign)&&!m(ac.type)) continue}
+    if(S.sqkFilter){const m=x=>x&&x.toUpperCase().includes(S.sqkFilter);if(!m(ac.squawk)&&!m(ac.reg)&&!m(ac.callsign)&&!m(ac.type)) continue}
     const pos=toScreen(ac.lat,ac.lon);
     if(pos.dist>mr) continue;
     const al=sel?1:Math.max(0.2,1-age);
@@ -1268,7 +1268,7 @@ function setTgtListHtml(html){
 function updList(){
   const s=S.aircraft.filter(a=>a&&a.lat!=null&&typeof a.lat=='number').map(a=>({a,dist:distNm(S.centerLat,S.centerLng,a.lat,a.lon)})).sort((a,b)=>a.dist-b.dist);
   if(!s.length){setTgtListHtml('<div class="empty">NO TARGETS</div>');tgtCount.textContent='0';return}
-  const v=s.filter(x=>{if(S.sqkFilter){const m=v=>v&&v.startsWith(S.sqkFilter);if(!m(x.a.squawk)&&!m(x.a.reg)&&!m(x.a.callsign)&&!m(x.a.type)) return false}return x.dist<=S.maxRange&&x.a.spd>=S.minSpd});
+  const v=s.filter(x=>{if(S.sqkFilter){const m=v=>v&&v.toUpperCase().includes(S.sqkFilter);if(!m(x.a.squawk)&&!m(x.a.reg)&&!m(x.a.callsign)&&!m(x.a.type)) return false}return x.dist<=S.maxRange&&x.a.spd>=S.minSpd});
   tgtCount.textContent=v.length;
   if(!v.length){setTgtListHtml('<div class="empty">NO TARGETS IN RANGE</div>');return}
   let h='<table><thead><tr><th>C/S</th><th>NM</th><th>TYPE</th><th>ALT</th><th>KT</th><th>HDG</th></tr></thead><tbody>';
