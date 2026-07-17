@@ -37,7 +37,7 @@
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:'Consolas','Courier New',monospace;color:var(--fg);user-select:none;-webkit-font-smoothing:antialiased}
 #app{display:flex;width:100%;height:100%}
 #radar-wrap{flex:1;position:relative;min-width:0;overflow:hidden}
-#radar-wrap canvas{display:block;position:absolute;top:0;left:0;width:100%;height:100%}
+#radar-wrap canvas{display:block;position:absolute;top:0;left:0;width:100%;height:100%;cursor:grab}
 #range-overlay{position:absolute;bottom:10px;right:10px;z-index:5;display:flex;flex-direction:column;align-items:stretch;gap:3px;background:color-mix(in srgb,var(--bg2) 75%,transparent);border:1px solid var(--border2);border-radius:3px;padding:4px 8px;min-width:90px}
 #range-overlay .ro-hdr{display:flex;justify-content:space-between;align-items:center}
 #range-overlay label{font-size:10px;color:var(--fg-muted2);letter-spacing:0.5px;text-transform:uppercase}
@@ -666,6 +666,18 @@ function toScreen(lat,lon){
   const b=bearing(S.centerLat,S.centerLng,lat,lon);
   const r=(d/S.maxRange)*S.rad, br=toRad(b);
   return{x:S.cx+r*Math.sin(br),y:S.cy-r*Math.cos(br),dist:d,bearing:b};
+}
+function toLatLng(px,py){
+  const dx=px-S.cx, dy=py-S.cy;
+  const rpx=Math.sqrt(dx*dx+dy*dy);
+  const d=(rpx/S.rad)*S.maxRange;
+  if(rpx<0.5) return{lat:S.centerLat,lng:S.centerLng};
+  const b=toDeg(Math.atan2(dx,-dy));
+  const R=3440.065, bRad=toRad(b), dRad=d/R;
+  const lat1=toRad(S.centerLat), lng1=toRad(S.centerLng);
+  const lat2=Math.asin(Math.sin(lat1)*Math.cos(dRad)+Math.cos(lat1)*Math.sin(dRad)*Math.cos(bRad));
+  const lng2=lng1+Math.atan2(Math.sin(bRad)*Math.sin(dRad)*Math.cos(lat1),Math.cos(dRad)-Math.sin(lat1)*Math.sin(lat2));
+  return{lat:toDeg(lat2),lng:toDeg(lng2)};
 }
 
 // ===== MAP TILES =====
@@ -1466,7 +1478,70 @@ function playAtc(btn,stream){
   p.appendChild(a);
 }
 
+// ===== PAN/ZOOM =====
+let pan={active:false,moved:false,sx:0,sy:0,clat:0,clng:0};
+
+function startPan(e){
+  if(e.button!==0) return;
+  const r=canvas.getBoundingClientRect();
+  pan.sx=(e.clientX-r.left)/r.width*S.w;
+  pan.sy=(e.clientY-r.top)/r.height*S.h;
+  pan.clat=S.centerLat; pan.clng=S.centerLng;
+  pan.active=true; pan.moved=false;
+  canvas.style.cursor='grabbing';
+}
+
+function movePan(e){
+  if(!pan.active) return;
+  const r=canvas.getBoundingClientRect();
+  const px=(e.clientX-r.left)/r.width*S.w;
+  const py=(e.clientY-r.top)/r.height*S.h;
+  const start=toLatLng(pan.sx,pan.sy);
+  const cur=toLatLng(px,py);
+  S.centerLat=pan.clat+(start.lat-cur.lat);
+  S.centerLng=pan.clng+(start.lng-cur.lng);
+  pan.moved=true;
+  S.bgDirty=true;
+  S.currentAirport='';
+  centerLabel.textContent='Pan ·';
+}
+
+function endPan(e){
+  if(!pan.active) return;
+  pan.active=false;
+  canvas.style.cursor='';
+  if(pan.moved){
+    S.lastMetarFetch=0;
+    S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,2000);
+    loadMapTiles();
+  }
+}
+
+canvas.addEventListener('mousedown',startPan);
+canvas.addEventListener('mousemove',movePan);
+canvas.addEventListener('mouseup',endPan);
+canvas.addEventListener('mouseleave',endPan);
+
+let zoomThrottle=0;
+canvas.addEventListener('wheel',e=>{
+  if(!e.ctrlKey&&!e.metaKey) return;
+  e.preventDefault();
+  const now=Date.now();
+  if(now-zoomThrottle<250) return;
+  zoomThrottle=now;
+  const step=e.deltaY>0?5:-5;
+  const v=Math.max(15,Math.min(100,S.maxRange+step));
+  S.maxRange=S.mr=v;
+  zoomSlider.value=v;
+  rangeVal.textContent=v+' NM';
+  S.bgDirty=true;
+  S.lastMetarFetch=0;
+  loadMapTiles();S.lastFetch=-10000;fetchData();
+  saveSettings();
+});
+
 canvas.addEventListener('click',e=>{
+  if(pan.moved){pan.moved=false;return}
   const r=canvas.getBoundingClientRect();
   const px=(e.clientX-r.left)/r.width*S.w;
   const py=(e.clientY-r.top)/r.height*S.h;
@@ -1492,6 +1567,7 @@ canvas.addEventListener('click',e=>{
 });
 
 canvas.addEventListener('mousemove',e=>{
+  if(pan.active) return;
   const r=canvas.getBoundingClientRect();
   const px=(e.clientX-r.left)/r.width*S.w;
   const py=(e.clientY-r.top)/r.height*S.h;
