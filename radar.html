@@ -302,7 +302,7 @@ const tileStatus = document.getElementById('tile-status');
 
 
 
-// ===== LIVEAAT FEED DISCOVERY (client-side audio probe) =====
+// ===== LIVEAAT FEED DISCOVERY =====
 const liveatcCache = {};
 const LIVEATC_MOUNTS = (icao)=>[
   icao, `${icao}_twr`, `${icao}_app`, `${icao}_gnd`, `${icao}_dep`,
@@ -320,19 +320,20 @@ async function getLiveAtcFeeds(icao) {
     new Promise(resolve => {
       const label = mount.replace(icao, '').replace(/^_/, '').toUpperCase() || 'Combined';
       const audio = new Audio();
-      audio.preload = 'none';
-      const timer = setTimeout(() => { audio.src = ''; resolve(null); }, 4000);
-      audio.addEventListener('canplaythrough', () => {
-        clearTimeout(timer);
-        audio.src = '';
-        resolve({ label, streamId: mount });
+      audio.preload = 'auto';
+      const timer = setTimeout(() => { audio.src = ''; resolve(null); }, 5000);
+      audio.addEventListener('loadedmetadata', () => {
+        if (audio.duration === Infinity || audio.duration > 0) {
+          clearTimeout(timer);
+          audio.src = '';
+          resolve({ label, streamId: mount });
+        }
       }, { once: true });
       audio.addEventListener('error', () => {
         clearTimeout(timer);
         resolve(null);
       }, { once: true });
       audio.src = `https://d.liveatc.net/${mount}`;
-      audio.load();
     })
   ));
   for (const r of results) {
