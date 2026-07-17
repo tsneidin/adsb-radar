@@ -302,19 +302,44 @@ const tileStatus = document.getElementById('tile-status');
 
 
 
-// ===== LIVEAAT CACHE =====
+// ===== LIVEAAT FEED DISCOVERY (client-side audio probe) =====
 const liveatcCache = {};
+const LIVEATC_MOUNTS = (icao)=>[
+  icao, `${icao}_twr`, `${icao}_app`, `${icao}_gnd`, `${icao}_dep`,
+  `${icao}_atis`, `${icao}_clnc`, `${icao}_del`, `${icao}_mul`,
+  `${icao}_north`, `${icao}_south`, `${icao}_east`, `${icao}_west`,
+  `${icao}1_twr`, `${icao}1_gnd`, `${icao}1_app`, `${icao}1_atis`,
+  `${icao}1_gnd_twr`, `${icao}_gnd_twr`,
+];
 
 async function getLiveAtcFeeds(icao) {
+  icao = icao.toLowerCase();
   if (liveatcCache[icao]) return liveatcCache[icao];
-  try {
-    const r = await fetch(`/api/liveatc/${icao}`);
-    const d = await r.json();
-    liveatcCache[icao] = d.feeds || [];
-    return liveatcCache[icao];
-  } catch(e) {
-    return [];
+  const feeds = [];
+  const results = await Promise.allSettled(LIVEATC_MOUNTS(icao).map(mount =>
+    new Promise(resolve => {
+      const label = mount.replace(icao, '').replace(/^_/, '').toUpperCase() || 'Combined';
+      const audio = new Audio();
+      audio.preload = 'none';
+      const timer = setTimeout(() => { audio.src = ''; resolve(null); }, 4000);
+      audio.addEventListener('canplaythrough', () => {
+        clearTimeout(timer);
+        audio.src = '';
+        resolve({ label, streamId: mount });
+      }, { once: true });
+      audio.addEventListener('error', () => {
+        clearTimeout(timer);
+        resolve(null);
+      }, { once: true });
+      audio.src = `https://d.liveatc.net/${mount}`;
+      audio.load();
+    })
+  ));
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value) feeds.push(r.value);
   }
+  liveatcCache[icao] = feeds;
+  return feeds;
 }
 
 async function showAirportLiveAtc(ap) {
