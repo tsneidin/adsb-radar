@@ -302,62 +302,33 @@ const tileStatus = document.getElementById('tile-status');
 
 
 
-// ===== LIVEAAT FEED DISCOVERY =====
-const liveatcCache = {};
+// ===== LIVEAATC =====
 const LIVEATC_MOUNTS = (icao)=>[
-  icao, `${icao}_twr`, `${icao}_app`, `${icao}_gnd`, `${icao}_dep`,
-  `${icao}_atis`, `${icao}_clnc`, `${icao}_del`, `${icao}_mul`,
-  `${icao}_north`, `${icao}_south`, `${icao}_east`, `${icao}_west`,
-  `${icao}1_twr`, `${icao}1_gnd`, `${icao}1_app`, `${icao}1_atis`,
-  `${icao}1_gnd_twr`, `${icao}_gnd_twr`,
+  {id:`${icao}`, lbl:'All'},
+  {id:`${icao}_twr`, lbl:'TWR'},
+  {id:`${icao}_app`, lbl:'APP'},
+  {id:`${icao}_gnd`, lbl:'GND'},
+  {id:`${icao}_dep`, lbl:'DEP'},
+  {id:`${icao}_atis`, lbl:'ATIS'},
+  {id:`${icao}_clnc`, lbl:'CLNC'},
+  {id:`${icao}_del`, lbl:'DEL'},
+  {id:`${icao}_mul`, lbl:'MUL'},
+  {id:`${icao}_north`, lbl:'N'},
+  {id:`${icao}_south`, lbl:'S'},
+  {id:`${icao}_east`, lbl:'E'},
+  {id:`${icao}_west`, lbl:'W'},
 ];
 
-async function getLiveAtcFeeds(icao) {
-  icao = icao.toLowerCase();
-  if (liveatcCache[icao]) return liveatcCache[icao];
-  const feeds = [];
-  const results = await Promise.allSettled(LIVEATC_MOUNTS(icao).map(mount =>
-    new Promise(resolve => {
-      const label = mount.replace(icao, '').replace(/^_/, '').toUpperCase() || 'Combined';
-      const audio = new Audio();
-      audio.preload = 'auto';
-      const timer = setTimeout(() => { audio.src = ''; resolve(null); }, 5000);
-      audio.addEventListener('loadedmetadata', () => {
-        if (audio.duration === Infinity || audio.duration > 0) {
-          clearTimeout(timer);
-          audio.src = '';
-          resolve({ label, streamId: mount });
-        }
-      }, { once: true });
-      audio.addEventListener('error', () => {
-        clearTimeout(timer);
-        resolve(null);
-      }, { once: true });
-      audio.src = `https://d.liveatc.net/${mount}`;
-    })
-  ));
-  for (const r of results) {
-    if (r.status === 'fulfilled' && r.value) feeds.push(r.value);
-  }
-  liveatcCache[icao] = feeds;
-  return feeds;
-}
-
-async function showAirportLiveAtc(ap) {
+function showAirportLiveAtc(ap) {
   const icao = (ap.wxId || ap.icao || '').toLowerCase();
   if (!icao) return;
-  const feeds = await getLiveAtcFeeds(icao);
   S.selectedAirport = ap;
   const sec=document.getElementById('liveatc-section');
-  let h = `<b>${ap.icao} Audio</b><br>`;
-  if (feeds.length) {
-    for (const f of feeds) {
-      h += `<button class="atc-btn" data-stream="${f.streamId}" onclick="playAtc(this,'${f.streamId}')">▶ ${f.label}</button>`;
-    }
-  } else {
-    h += `<span style="color:${TC.fg}">No LiveATC feeds found</span>`;
+  let h = `<b>${ap.icao} Audio</b><br><div style="display:flex;flex-wrap:wrap;gap:3px;margin:4px 0">`;
+  for (const m of LIVEATC_MOUNTS(icao)) {
+    h += `<button class="atc-btn" style="flex:0;padding:4px 8px;min-width:40px;font-size:11px" data-stream="${m.id}" onclick="playAtc(this,'${m.id}')">${m.lbl}</button>`;
   }
-  sec.innerHTML = h + '<div id="atc-player" style="margin-top:2px"></div>';
+  sec.innerHTML = h + '</div><div id="atc-player" style="margin-top:2px"></div>';
 }
 
 function autoShowLiveAtc(){
@@ -365,6 +336,7 @@ function autoShowLiveAtc(){
   if(!q) return;
   const ap=S.airports.find(a=>(a.wxId||a.icao)==q);
   if(ap) showAirportLiveAtc(ap);
+  else document.getElementById('liveatc-section').innerHTML='';
 }
 
 // ===== AIRPORT DATA LOADER =====
