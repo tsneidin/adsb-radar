@@ -225,7 +225,8 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       </div>
       <h3 style="font-size:10px;margin-bottom:2px;margin-top:8px">Map Brightness <span id="map-opacity-val">10%</span></h3>
       <input type="range" id="map-opacity-slider" min="0" max="100" step="5" value="10" style="margin-bottom:8px">
-      <button class="small" id="font-settings-btn" style="margin-top:8px;width:100%">Font Settings</button>
+      <button id="trails-toggle" class="small on" style="width:100%;margin-bottom:6px">Target Trails</button>
+      <button class="small" id="font-settings-btn" style="width:100%">Font Settings</button>
     </details>
     <details class="grp">
       <summary>Collision Detection</summary>
@@ -431,7 +432,7 @@ const S = {
   currentAirport:'KMSN',
   mapTiles:null, mapTilesLoading:false,
   bgDirty:true,
-  showAllLabels:true,
+  showAllLabels:true, showTrails:true,
   fontFamily:'Consolas,Courier New,monospace', fontSize:12, fontStyle:'bold',
   theme:'green-scope',
 };
@@ -938,7 +939,7 @@ function render(ts){
   }
 
   // Trails — visible while data is fresh (60s), independent of sweep
-  for(const ac of S.aircraft){
+  if(S.showTrails) for(const ac of S.aircraft){
     const prox=proxSet.has(ac);
     const sel=ac===S.selected;
     const fresh=ts-ac.lastSeen<60000;
@@ -1017,7 +1018,7 @@ function render(ts){
   }
 
   // Heading lines
-  for(const ac of S.aircraft){
+  if(S.showTrails) for(const ac of S.aircraft){
     const sel=ac===S.selected;
     const age=sel?0:(ts-ac.lastLit)/DECAY_MS;
     if(!sel&&age>3.5) continue;
@@ -1230,6 +1231,13 @@ const labelsToggle = document.getElementById('labels-toggle');
 labelsToggle.addEventListener('click',()=>{
   S.showAllLabels=!S.showAllLabels;
   labelsToggle.classList.toggle('on',S.showAllLabels);
+  saveSettings();
+});
+
+const trailsToggle = document.getElementById('trails-toggle');
+trailsToggle.addEventListener('click',()=>{
+  S.showTrails=!S.showTrails;
+  trailsToggle.classList.toggle('on',S.showTrails);
   saveSettings();
 });
 
@@ -1459,7 +1467,7 @@ canvas.addEventListener('mousemove',e=>{
 });
 
 // ===== PERSIST =====
-const PERSIST_KEYS=['theme','maxRange','mapOpacity','altFilter','minSpd','sqkFilter','fontFamily','fontSize','fontStyle','fontColor','mapSource','showWxRadar','showAirports','showAllLabels','proxNm','proxFt'];
+const PERSIST_KEYS=['theme','maxRange','mapOpacity','altFilter','minSpd','sqkFilter','fontFamily','fontSize','fontStyle','fontColor','mapSource','showWxRadar','showAirports','showAllLabels','showTrails','proxNm','proxFt'];
 function saveSettings(){
   const o={};
   for(const k of PERSIST_KEYS) o[k]=S[k];
@@ -1498,6 +1506,7 @@ function loadSettings(){
     wxRadarToggle.classList.toggle('on',S.showWxRadar);
     airportToggle.classList.toggle('on',S.showAirports);
     labelsToggle.classList.toggle('on',S.showAllLabels);
+    trailsToggle.classList.toggle('on',S.showTrails);
     proxNmSlider.value=S.proxNm; proxNmVal.textContent=S.proxNm+' NM';
     proxFtSlider.value=S.proxFt; proxFtVal.textContent=S.proxFt+' FT';
     S.mr=S.maxRange;
