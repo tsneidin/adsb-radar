@@ -1287,8 +1287,8 @@ function updList(){
   const v=s.filter(x=>{if(S.sqkFilter){const m=v=>v&&v.toUpperCase().includes(S.sqkFilter);if(!m(x.a.squawk)&&!m(x.a.reg)&&!m(x.a.callsign)&&!m(x.a.type)) return false}return x.dist<=S.maxRange&&x.a.spd>=S.minSpd});
   tgtCount.textContent=v.length;
   if(!v.length){setTgtListHtml('<div class="empty">NO TARGETS IN RANGE</div>');return}
-  let h='<table><thead><tr><th>C/S</th><th>NM</th><th>TYPE</th><th>ALT</th><th>KT</th><th>HDG</th></tr></thead><tbody>';
-  for(const el of v){const a=el.a;if(!a)continue;const p=toScreen(a.lat,a.lon);const sel=a===S.selected;const tn=typeName(a.type);h+=`<tr class="${sel?'sel':''}" data-idx="${S.aircraft.indexOf(a)}"><td>${a.callsign}</td><td>${p.dist.toFixed(0)}</td><td${tn?` title="${tn.manufacturer} ${tn.model}"`:''}>${(a.type||'—').slice(0,8)}</td><td>${altStr(a.alt)}</td><td>${Math.round(a.spd)}</td><td>${Math.round(a.hdg)}</td></tr>`}
+  let h='<table><thead><tr><th>C/S</th><th>NM</th><th>TYPE</th><th>ALT</th><th>KT</th><th>HDG&deg;</th></tr></thead><tbody>';
+  for(const el of v){const a=el.a;if(!a)continue;const p=toScreen(a.lat,a.lon);const sel=a===S.selected;const tn=typeName(a.type);h+=`<tr class="${sel?'sel':''}" data-idx="${S.aircraft.indexOf(a)}"><td>${a.callsign}</td><td>${p.dist.toFixed(0)}@${Math.round(p.bearing)}</td><td${tn?` title="${tn.manufacturer} ${tn.model}"`:''}>${(a.type||'—').slice(0,8)}</td><td>${altStr(a.alt)}</td><td>${Math.round(a.spd)}</td><td>${Math.round(a.hdg)}</td></tr>`}
   setTgtListHtml(h+'</tbody></table>');
 }
 
