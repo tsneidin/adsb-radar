@@ -105,6 +105,22 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 #wx-popup .h{color:var(--fg);font-weight:bold;margin-bottom:3px}
 #wx-popup .m{color:var(--fg2)}
 #wx-popup .t{color:var(--fg-muted)}
+#wx-popup .fc{display:inline-block;font-size:9px;font-weight:bold;padding:0 4px;border-radius:2px;margin-right:4px}
+#wx-popup .fc.vfr{color:#00cc44;border:1px solid #00cc44}
+#wx-popup .fc.mvfr{color:#6699ff;border:1px solid #6699ff}
+#wx-popup .fc.ifr{color:#ff4444;border:1px solid #ff4444}
+#wx-popup .fc.lifr{color:#ff66ff;border:1px solid #ff66ff}
+#wx-popup .fc.speci{color:var(--fg-muted);border:1px solid var(--fg-muted)}
+#wx-popup .ot{float:right;opacity:0.55;font-size:9px}
+#wx-popup .mh{margin-bottom:2px}
+#wx-popup .mr{margin-bottom:1px;color:var(--fg2)}
+#wx-popup .vi{font-size:9px;opacity:0.35;margin-bottom:2px}
+#wx-popup .th{color:var(--fg);font-weight:bold;margin-top:4px;margin-bottom:2px;font-size:9px;text-transform:uppercase;letter-spacing:0.5px}
+#wx-popup .tp{color:var(--fg-muted);margin-bottom:1px;font-size:9px}
+#wx-popup .ti{color:var(--fg-muted2);font-size:8px;margin-bottom:3px}
+#wx-popup .tr{color:var(--fg-muted3);font-size:7px;margin-top:3px;word-break:break-all;opacity:0.5}
+#wx-popup .tl{color:var(--fg2)}
+#wx-popup .tz{color:var(--fg-muted3);font-size:8px}
 .popup{display:none;position:absolute;z-index:10;background:color-mix(in srgb,var(--bg2) 96%,transparent);border:1px solid var(--border);border-radius:4px;padding:12px 14px;min-width:240px;box-shadow:0 8px 32px rgba(0,0,0,0.5);pointer-events:auto}
 .popup.show{display:block}
 #font-popup{top:50%;left:50%;transform:translate(-50%,-50%)}
@@ -164,7 +180,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       <p><b>Theme</b> &mdash; Switch between Green Scope, Light, and Dark color schemes.<br>
       <b>Map Source</b> &mdash; VFR charts (sectional aeronautical) or standard OpenStreetMap.<br>
       <b>Weather Radar</b> &mdash; Toggle NEXRAD precipitation overlay on the map.<br>
-      <b>Display Airports</b> &mdash; Show/hide airport labels. Hover for METAR &amp; TAF weather reports.<br>
+      <b>Display Airports</b> &mdash; Show/hide airport labels. Hover for METAR &amp; TAF weather reports. Airport dots and labels are color-coded by flight category: <span style="color:#00cc00">VFR</span>, <span style="color:#4488ff">MVFR</span>, <span style="color:#ff4444">IFR</span>, <span style="color:#ff44ff">LIFR</span>.<br>
       <b>Map Opacity</b> &mdash; Adjust map layer transparency over the radar background.</p>
       <h4>Collision Detection</h4>
       <p>Sets proximity warning thresholds. Aircraft within the specified lateral (NM) and vertical (FT) distance of each other are highlighted in red on the scope and in the target list.</p>
@@ -359,18 +375,85 @@ async function loadAirports(){
 loadAirports();
 
 // ===== METAR/TAF =====
+function fmtTime(ts,tz){
+  if(ts==null) return '';
+  const d=new Date(ts*1000);
+  const z=tz?d.toLocaleString('en-US',{timeZone:tz,hour:'2-digit',minute:'2-digit',hour12:false,timeZoneName:'short'}):d.toUTCString().slice(17,22)+'Z';
+  return z;
+}
+function fmtMetar(w,tz){
+  if(!w||!w.metar) return '';
+  const ft=w.fltCat||'';
+  const ws=w.wspd!=null?`${w.wdir||'?'}°@${w.wspd}kt${w.wgst?`G${w.wgst}`:''}`:'';
+  const vs=w.visib?`${w.visib}sm`:'';
+  const cs=w.clouds?.map(c=>`${c.cover||''}${c.base?c.base:''}`).filter(Boolean).join(', ')||w.cover||'';
+  const ts=w.temp!=null?`${w.temp}°`:'';
+  const ds=w.dewp!=null?`${w.dewp}°`:'';
+  const al=w.altim!=null?`${(w.altim/33.86).toFixed(2)}"`:'';
+  const ot=fmtTime(w.obsTime,tz);
+  return `<div class="mh">${ft?`<span class="fc ${ft.toLowerCase()}">${ft}</span>`:''}${w.metarType==='SPECI'?'<span class="fc speci">SPECI</span>':''}<span class="ot">${ot}</span></div>`+
+    `<div class="mr">${[ws,vs,cs].filter(Boolean).join(' | ')}</div>`+
+    `<div class="mr">${[ts&&'T'+ts,ds&&'D'+ds,al&&'A'+al].filter(Boolean).join(' | ')}</div>`;
+}
+function fmtTafVis(v){
+  const s=v==null?'':String(v);
+  if(s==='6+') return 'P6SM';
+  const n=parseFloat(s);
+  return isNaN(n)?'':(s.includes('/')?`${n} ${s.split('/')[1]?s.split('/')[1]:''}SM`:n+'SM');
+}
+function fmtTafWind(d,s,g){
+  if(d==null) return '';
+  const dir=d===0?'000':d==='VRB'?'VRB':String(d).padStart(3,'0');
+  const spd=s!=null?String(Math.round(s)).padStart(2,'0'):'';
+  return `${dir}${spd}KT${g!=null?`G${String(Math.round(g)).padStart(2,'0')}`:''}`;
+}
+function fmtTafCloud(cs){
+  if(!cs||!cs.length) return '';
+  return cs.map(c=>{
+    const cov=c.cover||'';
+    const hgt=c.base!=null?String(Math.round(c.base/100)).padStart(3,'0'):'';
+    const cb=c.type==='CB'?'CB':'';
+    return cov+hgt+cb;
+  }).filter(Boolean).join(' ');
+}
+function fmtTafShort(ts,tz){
+  if(ts==null) return '';
+  if(tz) return new Date(ts*1000).toLocaleString('en-US',{timeZone:tz,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replace(',','');
+  const d=new Date(ts*1000);
+  return `${String(d.getUTCDate()).padStart(2,'0')}${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}Z`;
+}
+function fmtTaf(w,tz){
+  if(!w||!w.tafData||!w.tafData.length) return '';
+  const it=w.tafIssueTime?new Date(w.tafIssueTime):null;
+  const its=it?it.toLocaleString('en-US',{timeZone:tz,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replace(',',''):null;
+  const vf=w.tafValidFrom, vt=w.tafValidTo;
+  const lines=w.tafData.map((f,i)=>{
+    const ch=f.fcstChange||'';
+    const chLabel=ch||'';
+    const fm=f.timeFrom?fmtTafShort(f.timeFrom,tz):'';
+    const to=f.timeTo?fmtTafShort(f.timeTo,tz):'';
+    const ws=fmtTafWind(f.wdir,f.wspd,f.wgst);
+    const vs=fmtTafVis(f.visib);
+    const wx=f.wxString||'';
+    const cs=fmtTafCloud(f.clouds);
+    return `<div class="tp"><b>${chLabel}</b> ${fm}${ch&&ch!=='PROB30'&&ch!=='PROB40'&&ch!=='TEMPO'&&ch!=='BECMG'?'':'—'+to} | ${[ws,vs,wx,cs].filter(Boolean).join(' ')}</div>`;
+  }).join('');
+  return `<div class="th">TAF</div>`+
+    `<div class="ti">${its?its+' | ':''}${fmtTafShort(vf,tz)} — ${fmtTafShort(vt,tz)}</div>`+
+    `${lines}${w.taf?`<div class="tr">${w.taf}</div>`:''}`;
+}
 let _wxFetching = new Set();
+let _lastMetarAttempt = 0;
 async function fetchWx(ap){
   const wxId=ap.wxId||ap.icao;
   if(!wxId||_wxFetching.has(wxId)) return S.wxCache[wxId]||{metar:'',taf:''};
   if(S.wxCache[wxId]&&Date.now()-S.wxCache[wxId].ts<300000) return S.wxCache[wxId];
   _wxFetching.add(wxId);
   const cached=S.wxCache[wxId]||{metar:'',taf:''};
-  cached.ts=Date.now();
   S.wxCache[wxId]=cached;
   try{
     const base=location.port==='8080'||!location.port?'':'https://www.aviationweather.gov';
-    const r=await fetch(base+`/api/data/metar?ids=${wxId}&format=json&date=${new Date().toISOString().slice(0,10)}`,{cache:'no-store'});
+    const r=await fetch(base+`/api/data/metar?ids=${wxId}&format=json&hoursBeforeNow=2`,{cache:'no-store'});
     if(r.ok){
       const data=await r.json();
       if(Array.isArray(data)&&data[0]){
@@ -378,6 +461,27 @@ async function fetchWx(ap){
         cached.metar=st.rawOb||'';
         cached.lat=st.lat; cached.lon=st.lon;
         cached.ts=Date.now();
+        cached.obsTime=st.obsTime;
+        cached.temp=st.temp; cached.dewp=st.dewp;
+        cached.wdir=st.wdir; cached.wspd=st.wspd; cached.wgst=st.wgst;
+        cached.visib=st.visib; cached.altim=st.altim;
+        cached.cover=st.cover; cached.clouds=st.clouds;
+        cached.fltCat=st.fltCat; cached.metarType=st.metarType;
+      }
+    }
+  }catch(e){}
+  try{
+    const base=location.port==='8080'||!location.port?'':'https://www.aviationweather.gov';
+    const r=await fetch(base+`/api/data/taf?ids=${wxId}&format=json&hoursBeforeNow=6`,{cache:'no-store'});
+    if(r.ok){
+      const data=await r.json();
+      if(Array.isArray(data)&&data[0]){
+        const st=data[0];
+        cached.taf=st.rawTAF||st.rawOb||'';
+        cached.tafData=st.fcsts;
+        cached.tafIssueTime=st.issueTime;
+        cached.tafValidFrom=st.validTimeFrom;
+        cached.tafValidTo=st.validTimeTo;
       }
     }
   }catch(e){}
@@ -395,11 +499,13 @@ async function fetchScopeWx(){
   const isLocal=location.port==='8080'||!location.port;
   const base=isLocal?'':'https://www.aviationweather.gov';
   const now=Date.now();
+  let ok=false;
   try{
-    const r=await fetch(base+`/api/data/metar?ids=${ids}&format=json&date=${new Date().toISOString().slice(0,10)}`,{cache:'no-store'});
+    const r=await fetch(base+`/api/data/metar?ids=${ids}&format=json&hoursBeforeNow=2`,{cache:'no-store'});
     if(!r.ok) return;
     const data=await r.json();
     if(!Array.isArray(data)) return;
+    ok=true;
     for(const st of data){
       const id=st.icaoId||st.stationId;
       if(!id) continue;
@@ -408,6 +514,12 @@ async function fetchScopeWx(){
       S.wxCache[id].lat=st.lat;
       S.wxCache[id].lon=st.lon;
       S.wxCache[id].ts=now;
+      S.wxCache[id].obsTime=st.obsTime;
+      S.wxCache[id].temp=st.temp; S.wxCache[id].dewp=st.dewp;
+      S.wxCache[id].wdir=st.wdir; S.wxCache[id].wspd=st.wspd; S.wxCache[id].wgst=st.wgst;
+      S.wxCache[id].visib=st.visib; S.wxCache[id].altim=st.altim;
+      S.wxCache[id].cover=st.cover; S.wxCache[id].clouds=st.clouds;
+      S.wxCache[id].fltCat=st.fltCat; S.wxCache[id].metarType=st.metarType;
       if(st.lat&&st.lon&&!S.airports.some(a=>a.icao===id)){
         S.airports.push({
           icao:id,faaId:id,lat:st.lat,lon:st.lon,name:st.name||id,
@@ -417,7 +529,7 @@ async function fetchScopeWx(){
     }
   }catch(e){console.error('metar ids error',e)}
   try{
-    const r=await fetch(base+`/api/data/taf?ids=${ids}&format=json&date=${new Date().toISOString().slice(0,10)}`,{cache:'no-store'});
+    const r=await fetch(base+`/api/data/taf?ids=${ids}&format=json&hoursBeforeNow=6`,{cache:'no-store'});
     if(!r.ok) return;
     const data=await r.json();
     if(!Array.isArray(data)) return;
@@ -425,11 +537,15 @@ async function fetchScopeWx(){
       const id=st.icaoId||st.stationId;
       if(!id) continue;
       if(!S.wxCache[id]) S.wxCache[id]={metar:'',taf:''};
-      S.wxCache[id].taf=st.rawOb||'';
+      S.wxCache[id].taf=st.rawTAF||st.rawOb||'';
+      S.wxCache[id].tafData=st.fcsts;
+      S.wxCache[id].tafIssueTime=st.issueTime;
+      S.wxCache[id].tafValidFrom=st.validTimeFrom;
+      S.wxCache[id].tafValidTo=st.validTimeTo;
       S.wxCache[id].ts=now;
     }
   }catch(e){console.error('taf ids error',e)}
-  S.lastMetarFetch=now;
+  if(ok) S.lastMetarFetch=now;
 }
 
 // ===== STATE =====
@@ -791,7 +907,8 @@ async function fetchData(){
     await fetchLiveData();
     S.dataMode='live';
     S.rateLimitBackoff=0;
-    if(!S.lastMetarFetch||Date.now()-S.lastMetarFetch>300000){fetchScopeWx()}
+    const _n=Date.now();
+    if((!S.lastMetarFetch||_n-S.lastMetarFetch>300000)&&_n-_lastMetarAttempt>60000){_lastMetarAttempt=_n;fetchScopeWx()}
   }catch(e){
     const m=e.message;
     if(m.includes('429')||m.includes('403')||m.includes('Too Many')){
@@ -1021,11 +1138,14 @@ function render(ts){
         if(!_wxFetching.has(ap.wxId||ap.icao)) fetchWx(ap);
         continue;
       }
+      const wx=S.wxCache[ap.wxId||ap.icao]||{};
+      const fc=wx.fltCat||'';
+      const fcColor=fc==='VFR'?'#00cc00':fc==='MVFR'?'#4488ff':fc==='IFR'?'#ff4444':fc==='LIFR'?'#ff44ff':'';
       ctx.save();
-      ctx.strokeStyle=TC.dim9; ctx.lineWidth=0.7;
+      ctx.strokeStyle=fcColor||TC.dim9; ctx.lineWidth=0.7;
       ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.stroke();
-      ctx.fillStyle=TC.dim8; ctx.beginPath(); ctx.arc(p.x,p.y,1.5,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle=TC.dim13;
+      ctx.fillStyle=fcColor||TC.dim8; ctx.beginPath(); ctx.arc(p.x,p.y,1.5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=fcColor||TC.dim13;
       ctx.font=S.fontStyle+' 9px '+S.fontFamily;
       ctx.textAlign='left'; ctx.textBaseline='bottom';
       ctx.fillText(ap.icao,p.x+5,p.y-2);
@@ -1149,7 +1269,7 @@ zoomSlider.addEventListener('input',()=>{
   rangeVal.textContent=S.maxRange+' NM';
   S.bgDirty=true;
   clearTimeout(zoomTimer);
-  zoomTimer=setTimeout(()=>{S.lastMetarFetch=0;loadMapTiles();S.lastFetch=-10000;fetchData()},250);
+  zoomTimer=setTimeout(()=>{S.lastMetarFetch=0;_lastMetarAttempt=0;loadMapTiles();S.lastFetch=-10000;fetchData()},250);
   saveSettings();
 });
 
@@ -1443,7 +1563,7 @@ function endPan(e){
   canvas.style.cursor='';
   pan.wasMoved=pan.moved;
   if(pan.moved){
-    S.lastMetarFetch=0;
+    S.lastMetarFetch=0;_lastMetarAttempt=0;
     S.bgDirty=true;
     loadMapTiles();
     S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,500);
@@ -1468,7 +1588,7 @@ canvas.addEventListener('wheel',e=>{
   zoomSlider.value=v;
   rangeVal.textContent=v+' NM';
   S.bgDirty=true;
-  S.lastMetarFetch=0;
+  S.lastMetarFetch=0;_lastMetarAttempt=0;
   loadMapTiles();S.lastFetch=-10000;fetchData();
   saveSettings();
 });
@@ -1529,9 +1649,11 @@ canvas.addEventListener('mousemove',e=>{
           src=apt?apt.icao:closest;
         }
       }
+      const tz=best.timezone||'America/Chicago';
       wxPopup.innerHTML=`<div class="h">${best.icao} ${best.name||''}</div>`+
-        (metar?`<div class="m">${metar}</div>`+(src?`<div style="opacity:0.35;font-size:9px">via ${src}</div>`:''):'<div class="m" style="opacity:0.4">No METAR</div>')+
-        (w.taf?`<div class="t">${w.taf}</div>`:'');
+        (w.metar?fmtMetar(w,tz):(metar?`<div class="m">${metar}</div>`:'<div class="m" style="opacity:0.4">No METAR</div>'))+
+        (src?`<div class="vi">via ${src}</div>`:'')+
+        (w.tafData?fmtTaf(w,tz):(w.taf?`<div class="t">${w.taf}</div>`:''));
       wxPopup.style.left=(e.clientX+12)+'px';
       wxPopup.style.top=(e.clientY-10)+'px';
       wxPopup.classList.add('show');
