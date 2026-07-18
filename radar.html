@@ -383,9 +383,12 @@ async function loadAirports(){
 loadAirports();
 
 // ===== METAR/TAF =====
+let _wxFetching = new Set();
 async function fetchWx(ap){
   const wxId=ap.wxId||ap.icao;
+  if(!wxId||_wxFetching.has(wxId)) return S.wxCache[wxId]||{metar:'',taf:''};
   if(S.wxCache[wxId]&&Date.now()-S.wxCache[wxId].ts<300000) return S.wxCache[wxId];
+  _wxFetching.add(wxId);
   const cached=S.wxCache[wxId]||{metar:'',taf:''};
   cached.ts=Date.now();
   S.wxCache[wxId]=cached;
@@ -402,13 +405,14 @@ async function fetchWx(ap){
       }
     }
   }catch(e){}
+  _wxFetching.delete(wxId);
   return cached;
 }
 
 async function fetchScopeWx(){
   const aps=S.airports.filter(a=>{
     const d=distNm(S.centerLat,S.centerLng,a.lat,a.lon);
-    return d<=S.maxRange;
+    return d<=S.maxRange*1.5;
   });
   if(!aps.length) return;
   const ids=aps.map(a=>a.wxId||a.icao).join(',');
@@ -1030,7 +1034,11 @@ function render(ts){
     for(const ap of S.airports){
       const p=toScreen(ap.lat,ap.lon);
       if(p.dist>S.maxRange) continue;
-      if(!S.wxCache[ap.wxId||ap.icao]?.metar) continue;
+      const _met=S.wxCache[ap.wxId||ap.icao]?.metar;
+      if(!_met){
+        if(!_wxFetching.has(ap.wxId||ap.icao)) fetchWx(ap);
+        continue;
+      }
       ctx.save();
       ctx.strokeStyle=TC.dim9; ctx.lineWidth=0.7;
       ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.stroke();
