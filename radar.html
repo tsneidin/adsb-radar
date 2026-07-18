@@ -389,13 +389,26 @@ async function fetchWx(ap){
   const cached=S.wxCache[wxId]||{metar:'',taf:''};
   cached.ts=Date.now();
   S.wxCache[wxId]=cached;
+  try{
+    const base=location.port==='8080'||!location.port?'':'https://www.aviationweather.gov';
+    const r=await fetch(base+`/api/data/metar?ids=${wxId}&format=json&date=${new Date().toISOString().slice(0,10)}`,{cache:'no-store'});
+    if(r.ok){
+      const data=await r.json();
+      if(Array.isArray(data)&&data[0]){
+        const st=data[0];
+        cached.metar=st.rawOb||'';
+        cached.lat=st.lat; cached.lon=st.lon;
+        cached.ts=Date.now();
+      }
+    }
+  }catch(e){}
   return cached;
 }
 
 async function fetchScopeWx(){
   const aps=S.airports.filter(a=>{
     const d=distNm(S.centerLat,S.centerLng,a.lat,a.lon);
-    return d<=S.maxRange && (a.wxId||a.icao||'').startsWith('K');
+    return d<=S.maxRange;
   });
   if(!aps.length) return;
   const ids=aps.map(a=>a.wxId||a.icao).join(',');
@@ -1017,6 +1030,7 @@ function render(ts){
     for(const ap of S.airports){
       const p=toScreen(ap.lat,ap.lon);
       if(p.dist>S.maxRange) continue;
+      if(!S.wxCache[ap.wxId||ap.icao]?.metar) continue;
       ctx.save();
       ctx.strokeStyle=TC.dim9; ctx.lineWidth=0.7;
       ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.stroke();
@@ -1442,6 +1456,7 @@ function endPan(e){
     S.lastMetarFetch=0;
     S.bgDirty=true;
     loadMapTiles();
+    S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,500);
     saveSettings();
   }
 }
