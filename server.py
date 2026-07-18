@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 from urllib.error import HTTPError
@@ -11,6 +11,8 @@ WX_HOST = 'www.aviationweather.gov'
 # LiveATC feed cache: icao -> (timestamp, feeds_json)
 _liveatc_cache = {}
 _last_search_time = 0
+
+
 
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -61,6 +63,13 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({'feeds': []})
                 return
             self.handle_liveatc(icao)
+            return
+        if self.path.startswith('/api/nnum/'):
+            nnum = self.path.split('/api/nnum/')[1].split('?')[0].strip().upper()
+            if not nnum:
+                self.send_json({})
+                return
+            self.handle_nnum(nnum)
             return
         super().do_GET()
 
@@ -158,10 +167,28 @@ class Handler(SimpleHTTPRequestHandler):
         _liveatc_cache[icao] = (now, result)
         self.send_json(result)
 
+    def handle_nnum(self, nnum):
+        result = {'nNumber': nnum}
+        ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        try:
+            url = f'https://registry.faa.gov/AircraftInquiry/Search/NNumberResult?NNumbertxt={nnum}'
+            req = Request(url, headers={'User-Agent': ua})
+            with urlopen(req, timeout=3) as resp:
+                html = resp.read().decode('utf-8', errors='replace')
+            m = re.search(r'<td[^>]*>Name</td>\s*<td[^>]*>([^<]+)</td>', html, re.IGNORECASE)
+            if m: result['owner'] = m.group(1).strip()
+            m = re.search(r'<td[^>]*>City</td>\s*<td[^>]*>([^<]+)</td>', html, re.IGNORECASE)
+            if m: result['city'] = m.group(1).strip()
+            m = re.search(r'<td[^>]*>State</td>\s*<td[^>]*>([^<]+)</td>', html, re.IGNORECASE)
+            if m: result['state'] = m.group(1).strip()
+        except Exception:
+            pass
+        self.send_json(result)
+
 if __name__ == '__main__':
-    # Change to the directory containing this script so radar.html is served
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     port = int(os.environ.get('PORT', 8080))
-    server = HTTPServer(('', port), Handler)
+    server = ThreadingHTTPServer(('', port), Handler)
+    server.timeout = 0.5
     print(f'Serving at http://localhost:{port}')
     server.serve_forever()

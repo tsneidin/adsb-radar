@@ -448,7 +448,7 @@ const S = {
   currentAirport:'KMSN',
   mapTiles:null, mapTilesLoading:false,
   bgDirty:true,
-  labelMode:2, showTrails:true,
+  labelMode:2, showTrails:true, nnumCache:{},
   fontFamily:'Consolas,Courier New,monospace', fontSize:12, fontStyle:'bold',
   theme:'green-scope',
 };
@@ -1311,18 +1311,55 @@ function typeName(code){
 // ===== TARGET INFO =====
 const infoEl=document.getElementById('target-info');
 
+function isNNumber(s){
+  return s&&/^N\d+[A-Z0-9]*$/i.test(s);
+}
+
 function showTargetInfo(ac){
   popupEl.classList.remove('show');
   const tn=typeName(ac.type);
+  let regLine='';
+  const nnum=ac.reg||(isNNumber(ac.callsign)?ac.callsign:'');
+  if(nnum){
+    regLine=`<span class="l">Reg:</span> <span class="v">${nnum}</span><br>`;
+    const cached=S.nnumCache[nnum];
+    if(cached){
+      regLine+=`<span class="l">Owner:</span> <span class="v">${cached.owner||'?'}</span><br>`+
+        (cached.city||cached.state?`<span class="l">Loc:</span> <span class="v">${[cached.city,cached.state].filter(Boolean).join(', ')}</span><br>`:'');
+    }else{
+      fetchNnum(nnum, ac.reg||ac.callsign);
+    }
+  }else{
+    regLine=`<span class="l">Reg:</span> <span class="v">—</span><br>`;
+  }
   infoEl.innerHTML=`<span class="close" onclick="hideTargetInfo()">✕</span>`+
     `<b>${ac.callsign}</b><br>`+
     `<span class="l">Type:</span> <span class="v">${ac.type||'—'}</span><br>${tn?`<span style="display:block;color:var(--fg4);font-size:10px;padding-left:8px;margin-bottom:4px">${tn.manufacturer} ${tn.model}</span>`:''}`+
-    `<span class="l">Reg:</span> <span class="v">${ac.reg||'—'}</span><br>`+
+    regLine+
     `<span class="l">Alt:</span> <span class="v">${altStr(ac.alt)}</span><br>`+
     `<span class="l">Spd:</span> <span class="v">${Math.round(ac.spd)} KT</span><br>`+
     `<span class="l">Hdg:</span> <span class="v">${Math.round(ac.hdg)}°</span><br>`+
     (ac.squawk?`<span class="l">Squawk:</span> <span class="v">${ac.squawk}</span><br>`:'');
   infoEl.classList.add('show');
+}
+
+async function fetchNnum(nnum, altMatch){
+  const data={};
+  try{
+    const r=await fetch(`https://api.adsbdb.com/v0/aircraft/${nnum}`);
+    const d=await r.json();
+    const ac=d?.response?.aircraft;
+    if(ac&&ac.registration) data.owner=ac.registered_owner||ac.registration;
+  }catch(e){}
+  try{
+    const r=await fetch(`/api/nnum/${nnum}`);
+    const d=await r.json();
+    if(d.owner) data.owner=d.owner;
+    if(d.city) data.city=d.city;
+    if(d.state) data.state=d.state;
+  }catch(e){}
+  if(data.owner) S.nnumCache[nnum]=data;
+  if(S.selected&&(S.selected.reg===nnum||(altMatch&&S.selected.callsign===altMatch))) showTargetInfo(S.selected);
 }
 
 function positionPopup(cx, cy){
