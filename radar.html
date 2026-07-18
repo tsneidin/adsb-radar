@@ -346,37 +346,13 @@ function autoShowLiveAtc(){
 }
 
 // ===== AIRPORT DATA LOADER =====
-function parseCsvLine(l){
-  const r=[];let f='',q=false;
-  for(let i=0;i<l.length;i++){
-    const c=l[i];
-    if(q){if(c==='"'){if(l[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
-    else if(c==='"')q=true
-    else if(c===','){r.push(f);f=''}
-    else f+=c;
-  }
-  r.push(f);return r;
-}
 async function loadAirports(){
   try{
-    const res=await fetch('https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat');
-    const txt=await res.text();
-    const ap=[];
-    for(const line of txt.split('\n')){
-      const c=parseCsvLine(line);
-      if(c.length<6) continue;
-      const icao=c[5]; if(!icao||icao==='\\N'||icao.length<3) continue;
-      const lat=parseFloat(c[6]); if(isNaN(lat)) continue;
-      const lon=parseFloat(c[7]); if(isNaN(lon)) continue;
-      const name=c[1];
-      const country=c[3];
-      const state=country;
-      const tz=c[11];
-      const wxId=icao;
-      ap.push({icao,lat,lon,name,state,timezone:tz,wxId,metar:'',taf:'',runways:null});
+    const res=await fetch('/api/airports');
+    if(res.ok){
+      S.airports=await res.json();
+      console.log('airports loaded',S.airports.length);
     }
-    S.airports=ap;
-    console.log('airports loaded',ap.length);
   }catch(e){console.error('airport load error',e)}
   console.log('airports ready:',S.airports.length);
 }
@@ -415,7 +391,7 @@ async function fetchScopeWx(){
     return d<=S.maxRange*1.5;
   });
   if(!aps.length) return;
-  const ids=aps.map(a=>a.wxId||a.icao).join(',');
+  const ids=aps.map(a=>a.wxId||a.icao).filter(Boolean).join(',');
   const isLocal=location.port==='8080'||!location.port;
   const base=isLocal?'':'https://www.aviationweather.gov';
   const now=Date.now();
@@ -432,6 +408,12 @@ async function fetchScopeWx(){
       S.wxCache[id].lat=st.lat;
       S.wxCache[id].lon=st.lon;
       S.wxCache[id].ts=now;
+      if(st.lat&&st.lon&&!S.airports.some(a=>a.icao===id)){
+        S.airports.push({
+          icao:id,faaId:id,lat:st.lat,lon:st.lon,name:st.name||id,
+          state:'',timezone:'America/Chicago',r:{},synthetic:true
+        });
+      }
     }
   }catch(e){console.error('metar ids error',e)}
   try{

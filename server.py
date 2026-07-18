@@ -11,11 +11,55 @@ WX_HOST = 'www.aviationweather.gov'
 # LiveATC feed cache: icao -> (timestamp, feeds_json)
 _liveatc_cache = {}
 _last_search_time = 0
+_airport_cache = None  # (timestamp, list)
 
-
+def load_airport_data():
+    global _airport_cache
+    now = time.time()
+    if _airport_cache and now - _airport_cache[0] < 3600:
+        return _airport_cache[1]
+    try:
+        import gzip
+        req = Request(
+            'https://cdn.jsdelivr.net/npm/@squawk/airport-data@0.7.10/data/airports.json.gz',
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+        with urlopen(req, timeout=15) as resp:
+            raw = gzip.decompress(resp.read())
+        data = json.loads(raw)
+        result = []
+        for r in data.get('records', []):
+            if r.get('country') != 'US': continue
+            if r.get('facilityType') != 'AIRPORT' or r.get('ownershipType') != 'PUBLIC': continue
+            if r.get('status') != 'OPEN': continue
+            if not r.get('fuelTypes'): continue
+            if not r.get('icao'): continue
+            result.append({
+                'icao': r['icao'], 'faaId': r.get('faaId',''),
+                'lat': r['lat'], 'lon': r['lon'],
+                'name': r.get('name',''), 'state': r.get('state',''),
+                'timezone': r.get('timezone',''),
+                'r': r.get('runways',[]), 'wxId': r['icao'],
+            })
+        _airport_cache = (now, result)
+        return result
+    except Exception as e:
+        raise e
 
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
+        if self.path == '/api/airports':
+            try:
+                aps = load_airport_data()
+                self.send_json(aps)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                self.send_response(500)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(f'Airport load error: {e}'.encode())
+            return
         if self.path.startswith('/api/v3/'):
             target = PROXY_TARGET + self.path.split('?')[0]
             qs = self.path.split('?', 1)[1] if '?' in self.path else ''
