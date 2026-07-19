@@ -26,15 +26,15 @@
   --shadow:#888888;
 }
 [data-theme=dark]{
-  --bg:#111111; --bg2:#1a1a1a; --bg3:#222222; --bg4:#2a2a2a;
-  --fg:#e0e0e0; --fg2:#aaaaaa; --fg3:#bbbbbb; --fg4:#cccccc;
-  --fg-muted:#666666; --fg-muted2:#777777; --fg-muted3:#888888;
-  --border:#333333; --border2:#444444; --border3:#555555; --border4:#2a2a2a;
-  --glow:rgba(255,255,255,0.12); --glow2:rgba(255,255,255,0.06); --glow3:rgba(255,255,255,0.03);
-  --cvs-overlay:rgba(255,255,255,0.05);
-  --shadow:#aaaaaa;
+  --bg:#14181c; --bg2:#1b2126; --bg3:#232a30; --bg4:#2b333a;
+  --fg:#f2f4f6; --fg2:#c7ced4; --fg3:#c7ced4; --fg4:#f2f4f6;
+  --fg-muted:#8b96a1; --fg-muted2:#8b96a1; --fg-muted3:#6b747c;
+  --border:#323b42; --border2:#323b42; --border3:#4fd67a; --border4:#2b333a;
+  --glow:rgba(79,214,122,0.25); --glow2:rgba(79,214,122,0.15); --glow3:rgba(79,214,122,0.08);
+  --cvs-overlay:rgba(20,24,28,0.5);
+  --shadow:#4fd67a;
 }
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:'Consolas','Courier New',monospace;color:var(--fg);user-select:none;-webkit-font-smoothing:antialiased}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:var(--fg);user-select:none;-webkit-font-smoothing:antialiased}
 #app{display:flex;width:100%;height:100%}
 #radar-wrap{flex:1;position:relative;min-width:0;overflow:hidden}
 #radar-wrap canvas{display:block;position:absolute;top:0;left:0;width:100%;height:100%;cursor:grab}
@@ -46,7 +46,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #pause-btn{position:absolute;bottom:10px;left:10px;z-index:5;width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg2) 75%,transparent);border:1px solid var(--border2);border-radius:3px;cursor:pointer;font-size:14px;color:var(--fg3);user-select:none}
 #pause-btn:hover{border-color:var(--fg);color:var(--fg)}
 #pause-btn.active{border-color:var(--fg);color:var(--fg);background:color-mix(in srgb,var(--bg) 85%,transparent)}
-#hud{position:absolute;top:10px;left:12px;font-size:13px;line-height:1.6;pointer-events:none;text-shadow:0 0 6px var(--shadow),0 0 12px rgba(0,0,0,0.3);opacity:0.95;z-index:2}
+#hud{position:absolute;top:10px;left:12px;font-size:13px;line-height:1.7;pointer-events:none;text-shadow:0 0 3px rgba(0,0,0,0.4);z-index:2}
 #hud span{display:block}
 #sidebar{width:350px;height:100%;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;padding:12px 14px;gap:8px;overflow-y:scroll;scrollbar-width:thin;scrollbar-color:var(--border3) transparent}
 #sidebar::-webkit-scrollbar{width:6px}
@@ -67,6 +67,7 @@ details.grp:not([open]){padding-bottom:7px}
 .ctrl-row button:hover{background:var(--border2);border-color:var(--border3);color:var(--fg3)}
 .ctrl-row button.on{background:var(--border);border-color:var(--fg);color:var(--fg);box-shadow:0 0 8px var(--glow2)}
 .ctrl-row button.small{flex:0;padding:4px 8px}
+.ctrl-row.ovl-row button.small{flex:1 1 0;min-width:0;height:32px;padding:0 4px;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 button.small{padding:3px 10px;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:11px;cursor:pointer;border-radius:3px;transition:.12s;flex:1}
 button.small:hover{background:var(--border2);border-color:var(--border3);color:var(--fg3)}
 button.small.on{background:var(--border);border-color:var(--fg);color:var(--fg)}
@@ -77,29 +78,29 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--fg);cursor:pointer;border:none}
 #center-label{font-size:12px;color:var(--fg)}
 #tgt-list{margin-top:1px}
-#tgt-list table{width:100%;border-collapse:collapse;font-size:11px}
-#tgt-list th{text-align:left;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.5px;padding:3px 3px 2px;border-bottom:1px solid var(--border2);background:var(--bg2);font-weight:400}
-#tgt-list td{padding:2px 4px;white-space:nowrap;border-bottom:1px solid var(--border4);color:var(--fg3);font-size:11px}
-#tgt-list tr.sel td{background:var(--border2);color:var(--fg)}
+#tgt-list table{width:100%;border-collapse:collapse;font-size:12.5px}
+#tgt-list th{text-align:left;color:var(--fg4);letter-spacing:.2px;padding:6px 8px;border-bottom:1px solid var(--border3);background:var(--bg3);font-weight:600}
+#tgt-list td{padding:6px 8px;white-space:nowrap;border-bottom:1px solid var(--border4);color:var(--fg3);font-size:12.5px}
+#tgt-list tr.sel td{background:var(--bg4);color:var(--fg);font-weight:600;box-shadow:inset 3px 0 0 var(--border3)}
 #tgt-list tr{cursor:pointer}
 #tgt-list .empty{color:var(--fg-muted3);font-size:12px;padding:16px 0;text-align:center}
 #tile-status{font-size:10px;color:var(--fg-muted2);text-transform:none;letter-spacing:0}
-#target-info{position:absolute;top:8px;right:8px;z-index:5;background:color-mix(in srgb,var(--bg2) 80%,transparent);border:1px solid var(--glow3);border-radius:3px;padding:6px 10px;font-size:11px;line-height:1.6;display:none;max-height:45%;overflow-y:auto;pointer-events:auto;min-width:160px}
+#target-info{position:absolute;top:8px;right:8px;z-index:5;background:color-mix(in srgb,var(--bg2) 92%,transparent);border:1px solid var(--border3);border-radius:8px;padding:9px 12px;font-size:12.5px;line-height:1.7;display:none;max-height:45%;overflow-y:auto;pointer-events:auto;min-width:170px}
 #target-info.show{display:block}
 #target-info .close{float:right;cursor:pointer;opacity:0.55;font-size:14px;line-height:1;margin:-2px -2px 0 0}
 #target-info .close:hover{opacity:0.7}
-#target-info .l{opacity:0.82}
-#target-info .v{float:right}
+#target-info .l{color:var(--fg-muted)}
+#target-info .v{float:right;color:var(--fg);font-weight:600}
 #target-info audio{width:100%;height:28px;margin:2px 0}
 .atc-btn{display:block;width:100%;padding:5px 8px;margin:3px 0;background:var(--bg4);border:1px solid var(--border2);color:var(--fg3);font:inherit;font-size:12px;cursor:pointer;border-radius:3px;text-align:left}
 .atc-btn:hover{background:var(--border2);border-color:var(--border3);color:var(--fg3)}
 .atc-btn.playing{background:var(--border);border-color:var(--fg)}
-#target-popup{position:absolute;z-index:6;background:color-mix(in srgb,var(--bg) 88%,transparent);border:1px solid var(--fg);border-radius:4px;padding:8px 12px;font-size:11px;line-height:1.7;display:none;pointer-events:auto;min-width:140px;box-shadow:0 4px 20px rgba(0,0,0,0.6)}
+#target-popup{position:absolute;z-index:6;background:color-mix(in srgb,var(--bg) 92%,transparent);border:1px solid var(--border3);border-radius:8px;padding:9px 13px;font-size:12.5px;line-height:1.75;display:none;pointer-events:auto;min-width:150px;box-shadow:0 4px 20px rgba(0,0,0,0.6)}
 #target-popup.show{display:block}
 #target-popup .close{float:right;cursor:pointer;opacity:0.55;font-size:14px;line-height:1;margin:-2px -2px 0 6px}
 #target-popup .close:hover{opacity:0.7}
-#target-popup .l{opacity:0.7}
-#target-popup .v{float:right;margin-left:12px}
+#target-popup .l{color:var(--fg-muted)}
+#target-popup .v{float:right;margin-left:12px;color:var(--fg);font-weight:600}
 #wx-popup{display:none;position:absolute;z-index:5;background:color-mix(in srgb,var(--bg2) 92%,transparent);border:1px solid var(--glow3);border-radius:3px;padding:8px 10px;font-size:10px;line-height:1.5;max-width:340px;pointer-events:none}
 #wx-popup.show{display:block}
 #wx-popup .h{color:var(--fg);font-weight:bold;margin-bottom:3px}
@@ -226,42 +227,49 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       </div>
     </div>
     <details class="grp">
-      <summary>Map Settings</summary>
-      <h3 style="font-size:10px;margin-bottom:3px">Theme</h3>
+      <summary>Scope Settings</summary>
+      <h3 style="font-size:10px;margin-bottom:3px">Color theme</h3>
       <div class="ctrl-row" style="gap:8px;margin-bottom:8px">
-        <button class="small on" data-theme-btn="green-scope">Green</button>
+        <button class="small" data-theme-btn="green-scope">Green</button>
         <button class="small" data-theme-btn="light">Light</button>
-        <button class="small" data-theme-btn="dark">Dark</button>
-        <button id="airport-toggle" class="small on" style="min-width:64px">Disp. Apts</button>
+        <button class="small on" data-theme-btn="dark">Dark</button>
       </div>
+      <h3 style="font-size:10px;margin-bottom:3px">Base map</h3>
       <div style="display:flex;gap:4px;margin-bottom:8px">
-        <button id="map-vfr" class="small on">VFR</button>
-        <button id="map-osm" class="small">OSM</button>
-        <button id="wx-radar-toggle" class="small">WX</button>
+        <button id="map-vfr" class="small on">VFR chart</button>
+        <button id="map-osm" class="small">OpenStreetMap</button>
+        <button id="map-none" class="small">None</button>
       </div>
-      <h3 style="font-size:10px;margin-bottom:2px;margin-top:8px">Map Brightness <span id="map-opacity-val">10%</span></h3>
+      <h3 style="font-size:10px;margin-bottom:2px">Map brightness <span id="map-opacity-val">10%</span></h3>
       <input type="range" id="map-opacity-slider" min="0" max="100" step="5" value="10" style="margin-bottom:8px">
-      <button id="trails-toggle" class="small on" style="width:100%;margin-bottom:6px">Target Trails</button>
-      <button class="small" id="font-settings-btn" style="width:100%">Font Settings</button>
+      <h3 style="font-size:10px;margin-bottom:3px">Overlays</h3>
+      <div class="ctrl-row ovl-row" style="gap:8px;margin-bottom:8px">
+        <button id="airport-toggle" class="small on">Airports</button>
+        <button id="wx-radar-toggle" class="small">Weather radar</button>
+        <button id="trails-toggle" class="small on">Target trails</button>
+        <button id="labels-toggle" class="small on">Target labels</button>
+      </div>
+      <button class="small" id="font-settings-btn" style="width:100%">Font settings</button>
     </details>
     <details class="grp">
       <summary>Collision Detection</summary>
-      <h3 style="font-size:10px;margin-bottom:2px">Horizontal Separation <span id="prox-nm-val">2 NM</span></h3>
+      <p style="font-size:10.5px;color:var(--fg-muted);margin-bottom:6px;line-height:1.4">Aircraft pairs closer than both thresholds below are highlighted in red on the scope and target list.</p>
+      <h3 style="font-size:10px;margin-bottom:2px">Horizontal separation <span id="prox-nm-val">2 NM</span></h3>
       <input type="range" id="prox-nm-slider" min="0.5" max="10" step="0.5" value="2">
-      <h3 style="font-size:10px;margin-top:4px;margin-bottom:2px">Vertical Separation <span id="prox-ft-val">700 FT</span></h3>
+      <h3 style="font-size:10px;margin-top:4px;margin-bottom:2px">Vertical separation <span id="prox-ft-val">700 FT</span></h3>
       <input type="range" id="prox-ft-slider" min="100" max="2000" step="100" value="700">
     </details>
     <details class="grp">
       <summary>Filters</summary>
-      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Max Altitude <span id="alt-flt-val">FL999+</span></h3>
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Max altitude <span id="alt-flt-val">FL999+</span></h3>
       <input type="range" id="alt-flt-slider" min="0" max="999" step="10" value="999">
-      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Min Speed <span id="min-spd-val">0 KT</span></h3>
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Min speed <span id="min-spd-val">0 KT</span></h3>
       <input type="range" id="min-spd-slider" min="0" max="600" step="10" value="0">
-      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Search Targets</h3>
-      <input type="text" id="sqk-filter" placeholder="squawk, N#, callsign, or type" style="width:100%;padding:4px 6px" value="">
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Search targets</h3>
+      <input type="text" id="sqk-filter" placeholder="Squawk, N-number, callsign, or type" style="width:100%;padding:4px 6px" value="">
     </details>
     <div class="grp">
-<h3>Targets <span id="tgt-count">0</span> <button id="labels-toggle" class="small on" style="float:right;padding:1px 4px;font-size:9px">Labels</button></h3>
+<h3>Targets <span id="tgt-count">0</span></h3>
       <div id="tgt-list"></div>
     </div>
     <div id="liveatc-section" class="grp"></div>
@@ -307,6 +315,7 @@ const mapOpacitySlider = document.getElementById('map-opacity-slider');
 const mapOpacityVal = document.getElementById('map-opacity-val');
 const mapVfr = document.getElementById('map-vfr');
 const mapOsm = document.getElementById('map-osm');
+const mapNone = document.getElementById('map-none');
 const wxRadarToggle = document.getElementById('wx-radar-toggle');
 const altFltSlider = document.getElementById('alt-flt-slider');
 const altFltVal = document.getElementById('alt-flt-val');
@@ -565,7 +574,7 @@ const S = {
   bgDirty:true,
   labelMode:2, showTrails:true, nnumCache:{},
   fontFamily:'Consolas,Courier New,monospace', fontSize:12, fontStyle:'bold',
-  theme:'green-scope',
+  theme:'dark',
 };
 
 // ===== THEME COLORS =====
@@ -587,8 +596,8 @@ const THEMES = {
     sweep1:'rgba(0,255,51,0.06)', sweep2:'rgba(0,255,51,0.025)', sweep3:'rgba(0,255,51,0)',
   },
   'dark':{
-    bg:'#111111',
-    fg:'#cccccc', fgSel:'#eeeeee', fgProx:'#ff5555',
+    bg:'#14181c',
+    fg:'#e8ecef', fgSel:'#4fd67a', fgProx:'#ff5f5f',
     dim:'rgba(255,255,255,0.02)', dim2:'rgba(255,255,255,0.04)', dim3:'rgba(255,255,255,0.08)',
     dim4:'rgba(255,255,255,0.12)', dim5:'rgba(255,255,255,0.15)', dim6:'rgba(255,255,255,0.2)',
     dim7:'rgba(255,255,255,0.25)', dim8:'rgba(255,255,255,0.3)', dim9:'rgba(255,255,255,0.35)',
@@ -596,10 +605,10 @@ const THEMES = {
     dim13:'rgba(255,255,255,1)', dim14:'rgba(255,255,255,0.04)',
     light:'rgba(200,200,200,0.4)', light2:'rgba(200,200,200,0.5)',
     light3:'rgba(200,200,200,0.7)', light4:'#dddddd',
-    shadow:'#aaaaaa', shadowSel:'#cccccc', shadowProx:'#ff5555',
-    prox:'#ff5555', prox2:'#ff7777', prox3:'rgba(255,80,80,0.2)', prox4:'rgba(255,80,80,0.8)',
-    overlay:'rgba(0,0,0,0.12)',
-    error:'#ff5555',
+    shadow:'#4fd67a', shadowSel:'#7fe89f', shadowProx:'#ff5f5f',
+    prox:'#ff5f5f', prox2:'#ff8080', prox3:'rgba(255,80,80,0.2)', prox4:'rgba(255,80,80,0.8)',
+    overlay:'rgba(20,24,28,0.5)',
+    error:'#ff5f5f',
     sweep1:'rgba(255,255,255,0.04)', sweep2:'rgba(255,255,255,0.015)', sweep3:'rgba(255,255,255,0)',
   },
   'light':{
@@ -684,6 +693,13 @@ function toLatLng(px,py){
 function tileZoom(){const r=S.maxRange;return r<=15?12:r<=30?11:r<=60?10:9}
 
 function loadMapTiles(){
+  if(S.mapSource==='none'){
+    S.mapTiles=[];
+    S.mapTilesLoading=false;
+    S.bgDirty=true;
+    tileStatus.textContent='';
+    return;
+  }
   const z=tileZoom(), n=1<<z;
   const rd=S.maxRange/60*1.25;
   const lr=rd/Math.cos(toRad(S.centerLat));
@@ -1277,11 +1293,13 @@ function setMapSource(src){
   S.mapSource=src;
   mapVfr.classList.toggle('on',src==='vfr');
   mapOsm.classList.toggle('on',src==='osm');
+  mapNone.classList.toggle('on',src==='none');
   loadMapTiles();
   saveSettings();
 }
 mapVfr.addEventListener('click',()=>setMapSource('vfr'));
 mapOsm.addEventListener('click',()=>setMapSource('osm'));
+mapNone.addEventListener('click',()=>setMapSource('none'));
 wxRadarToggle.addEventListener('click',()=>{
   S.showWxRadar=!S.showWxRadar;
   wxRadarToggle.classList.toggle('on',S.showWxRadar);
@@ -1411,7 +1429,7 @@ function updList(){
   const v=s.filter(x=>{if(S.sqkFilter){const m=v=>v&&v.toUpperCase().includes(S.sqkFilter);if(!m(x.a.squawk)&&!m(x.a.reg)&&!m(x.a.callsign)&&!m(x.a.type)) return false}return x.dist<=S.maxRange&&x.a.spd>=S.minSpd});
   tgtCount.textContent=v.length;
   if(!v.length){setTgtListHtml('<div class="empty">NO TARGETS IN RANGE</div>');return}
-  let h='<table><thead><tr><th>C/S</th><th>NM</th><th>TYPE</th><th>ALT</th><th>KT</th><th>HDG&deg;</th></tr></thead><tbody>';
+  let h='<table><thead><tr><th>C/S</th><th>NM</th><th>Type</th><th>Alt</th><th>Kt</th><th>Hdg&deg;</th></tr></thead><tbody>';
   for(const el of v){const a=el.a;if(!a)continue;const p=toScreen(a.lat,a.lon);const sel=a===S.selected;const tn=typeName(a.type);h+=`<tr class="${sel?'sel':''}" data-idx="${S.aircraft.indexOf(a)}"><td>${a.callsign}</td><td>${p.dist.toFixed(0)}@${Math.round(p.bearing)}</td><td${tn?` title="${tn.manufacturer} ${tn.model}"`:''}>${(a.type||'—').slice(0,8)}</td><td>${altStr(a.alt)}</td><td>${Math.round(a.spd)}</td><td>${Math.round(a.hdg)}</td></tr>`}
   setTgtListHtml(h+'</tbody></table>');
 }
@@ -1702,7 +1720,7 @@ function loadSettings(){
     sqkFilter.value=S.sqkFilter||'';
     fontFamily.value=S.fontFamily; fontSizeSlider.value=S.fontSize; fontSizeVal.textContent=S.fontSize;
     fontStyleBtns.forEach(b=>b.classList.toggle('on',b.dataset.fontStyle===S.fontStyle));
-    mapVfr.classList.toggle('on',S.mapSource==='vfr'); mapOsm.classList.toggle('on',S.mapSource==='osm');
+    mapVfr.classList.toggle('on',S.mapSource==='vfr'); mapOsm.classList.toggle('on',S.mapSource==='osm'); mapNone.classList.toggle('on',S.mapSource==='none');
     wxRadarToggle.classList.toggle('on',S.showWxRadar);
     airportToggle.classList.toggle('on',S.showAirports);
     labelsToggle.textContent=S.labelMode===2?'Labels':S.labelMode===1?'Short':'Labels';
@@ -1720,7 +1738,7 @@ function loop(t){try{render(t)}catch(e){console.warn('render',e)};if(++_frame%2=
 function init(){
   // load theme first so applyTheme uses the saved theme
   try{const r=localStorage.getItem('adsb-radar-settings');if(r){const o=JSON.parse(r);if(o.theme)S.theme=o.theme}}catch(e){}
-  applyTheme(S.theme||'green-scope');
+  applyTheme(S.theme||'dark');
   loadSettings();
   resize();
   window.addEventListener('resize',resize);
