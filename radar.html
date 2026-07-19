@@ -186,7 +186,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       <h4>Collision Detection</h4>
       <p>Sets proximity warning thresholds. Aircraft within the specified lateral (NM) and vertical (FT) distance of each other are highlighted in red on the scope and in the target list.</p>
       <h4>Filters</h4>
-      <p><b>Max Altitude</b> &mdash; Hides aircraft above this flight level.<br>
+      <p><b>Altitude</b> &mdash; Two sliders set the min and max flight level. Aircraft outside this range are hidden.<br>
       <b>Min Speed</b> &mdash; Hides aircraft below this ground speed.<br>
       <b>Search Targets</b> &mdash; Filters by squawk code, registration (N-number), callsign, or aircraft type.</p>
       <h4>Font Settings</h4>
@@ -261,8 +261,10 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
     </details>
     <details class="grp">
       <summary>Filters</summary>
-      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Max altitude <span id="alt-flt-val">FL999+</span></h3>
-      <input type="range" id="alt-flt-slider" min="0" max="999" step="10" value="999">
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Min altitude <span id="alt-min-val">FL0</span></h3>
+      <input type="range" id="alt-min-slider" min="0" max="999" step="10" value="0">
+      <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Max altitude <span id="alt-max-val">FL999+</span></h3>
+      <input type="range" id="alt-max-slider" min="0" max="999" step="10" value="999">
       <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Min speed <span id="min-spd-val">0 KT</span></h3>
       <input type="range" id="min-spd-slider" min="0" max="600" step="10" value="0">
       <h3 style="font-size:10px;margin-bottom:2px;margin-top:6px">Search targets</h3>
@@ -317,8 +319,10 @@ const mapVfr = document.getElementById('map-vfr');
 const mapOsm = document.getElementById('map-osm');
 const mapNone = document.getElementById('map-none');
 const wxRadarToggle = document.getElementById('wx-radar-toggle');
-const altFltSlider = document.getElementById('alt-flt-slider');
-const altFltVal = document.getElementById('alt-flt-val');
+const altMinSlider = document.getElementById('alt-min-slider');
+const altMinVal = document.getElementById('alt-min-val');
+const altMaxSlider = document.getElementById('alt-max-slider');
+const altMaxVal = document.getElementById('alt-max-val');
 const minSpdSlider = document.getElementById('min-spd-slider');
 const minSpdVal = document.getElementById('min-spd-val');
 const sqkFilter = document.getElementById('sqk-filter');
@@ -560,7 +564,7 @@ async function fetchScopeWx(){
 // ===== STATE =====
 const S = {
   sweepDeg:0, rpm:5, maxRange:25, mr:25, paused:false, mapSource:'vfr', mapOpacity:0.1, showWxRadar:false, wxRadarOpacity:0.35, wxRadarTiles:[],
-  proxNm:2, proxFt:700, altFilter:999, minSpd:0, sqkFilter:'',
+  proxNm:2, proxFt:700, minAlt:0, maxAlt:999, minSpd:0, sqkFilter:'',
   airports:[], showAirports:true, wxCache:{}, hoveredAirport:null, selectedAirport:null, lastMetarFetch:0,
   dataMode:'live',
   aircraft:[], lastFrame:0,
@@ -1088,7 +1092,7 @@ function render(ts){
     if(!sel&&!S.showTrails) continue;
     const fresh=ts-ac.lastSeen<60000;
     if(!sel&&(!fresh||ac.history.length<2)) continue;
-    if(ac.alt>0&&ac.alt>S.altFilter*100) continue;
+    if(ac.alt>S.maxAlt*100||ac.alt<S.minAlt*100) continue;
     const pos=toScreen(ac.lat,ac.lon);
     if(pos.dist>mr*1.05) continue;
     const al=sel?1:Math.max(0.2,1-(ts-ac.lastSeen)/60000);
@@ -1176,7 +1180,7 @@ function render(ts){
     const age=sel?0:(ts-ac.lastLit)/DECAY_MS;
     if(!sel&&age>3.5) continue;
     if(ac.hdg==null) continue;
-    if(ac.alt>0&&ac.alt>S.altFilter*100) continue;
+    if(ac.alt>S.maxAlt*100||ac.alt<S.minAlt*100) continue;
     const pos=toScreen(ac.lat,ac.lon);
     if(pos.dist>mr) continue;
     const hdgLen=Math.min(rad*0.9, (avgSpd(ac)/30)*(rad/S.maxRange));
@@ -1200,7 +1204,7 @@ function render(ts){
     const sel=ac===S.selected;
     const age=sel?0:(ts-ac.lastLit)/DECAY_MS;
     if(!sel&&age>3.5) continue;
-    if(ac.alt>0&&ac.alt>S.altFilter*100) continue;
+    if(ac.alt>S.maxAlt*100||ac.alt<S.minAlt*100) continue;
     if(ac.spd<S.minSpd) continue;
     if(S.sqkFilter){const m=x=>x&&x.toUpperCase().includes(S.sqkFilter);if(!m(ac.squawk)&&!m(ac.reg)&&!m(ac.callsign)&&!m(ac.type)) continue}
     const pos=toScreen(ac.lat,ac.lon);
@@ -1361,9 +1365,16 @@ mapOpacitySlider.addEventListener('input',()=>{
   saveSettings();
 });
 
-altFltSlider.addEventListener('input',()=>{
-  S.altFilter=parseInt(altFltSlider.value);
-  altFltVal.textContent=S.altFilter>=999?'FL999+':'FL'+S.altFilter;
+altMinSlider.addEventListener('input',()=>{
+  S.minAlt=parseInt(altMinSlider.value);
+  altMinVal.textContent='FL'+S.minAlt;
+  if(S.minAlt>S.maxAlt){S.maxAlt=S.minAlt;altMaxSlider.value=S.maxAlt;altMaxVal.textContent=S.maxAlt>=999?'FL999+':'FL'+S.maxAlt}
+  saveSettings();
+});
+altMaxSlider.addEventListener('input',()=>{
+  S.maxAlt=parseInt(altMaxSlider.value);
+  altMaxVal.textContent=S.maxAlt>=999?'FL999+':'FL'+S.maxAlt;
+  if(S.maxAlt<S.minAlt){S.minAlt=S.maxAlt;altMinSlider.value=S.minAlt;altMinVal.textContent='FL'+S.minAlt}
   saveSettings();
 });
 
@@ -1426,7 +1437,7 @@ function setTgtListHtml(html){
 function updList(){
   const s=S.aircraft.filter(a=>a&&a.lat!=null&&typeof a.lat=='number').map(a=>({a,dist:distNm(S.centerLat,S.centerLng,a.lat,a.lon)})).sort((a,b)=>a.dist-b.dist);
   if(!s.length){setTgtListHtml('<div class="empty">NO TARGETS</div>');tgtCount.textContent='0';return}
-  const v=s.filter(x=>{if(S.sqkFilter){const m=v=>v&&v.toUpperCase().includes(S.sqkFilter);if(!m(x.a.squawk)&&!m(x.a.reg)&&!m(x.a.callsign)&&!m(x.a.type)) return false}return x.dist<=S.maxRange&&x.a.spd>=S.minSpd});
+  const v=s.filter(x=>{if(S.sqkFilter){const m=v=>v&&v.toUpperCase().includes(S.sqkFilter);if(!m(x.a.squawk)&&!m(x.a.reg)&&!m(x.a.callsign)&&!m(x.a.type)) return false}return x.dist<=S.maxRange&&x.a.spd>=S.minSpd&&!(x.a.alt>S.maxAlt*100||x.a.alt<S.minAlt*100)});
   tgtCount.textContent=v.length;
   if(!v.length){setTgtListHtml('<div class="empty">NO TARGETS IN RANGE</div>');return}
   let h='<table><thead><tr><th>C/S</th><th>NM</th><th>Type</th><th>Alt</th><th>Kt</th><th>Hdg&deg;</th></tr></thead><tbody>';
@@ -1683,7 +1694,7 @@ canvas.addEventListener('mousemove',e=>{
 });
 
 // ===== PERSIST =====
-const PERSIST_KEYS=['theme','maxRange','mapOpacity','altFilter','minSpd','sqkFilter','fontFamily','fontSize','fontStyle','fontColor','mapSource','showWxRadar','showAirports','labelMode','showTrails','proxNm','proxFt','centerLat','centerLng'];
+const PERSIST_KEYS=['theme','maxRange','mapOpacity','minAlt','maxAlt','minSpd','sqkFilter','fontFamily','fontSize','fontStyle','fontColor','mapSource','showWxRadar','showAirports','labelMode','showTrails','proxNm','proxFt','centerLat','centerLng'];
 function saveSettings(){
   const o={};
   for(const k of PERSIST_KEYS) o[k]=S[k];
@@ -1715,7 +1726,8 @@ function loadSettings(){
     // sync UI controls
     zoomSlider.value=S.maxRange; rangeVal.textContent=S.maxRange+' NM';
     mapOpacitySlider.value=Math.round(S.mapOpacity*100); mapOpacityVal.textContent=Math.round(S.mapOpacity*100)+'%';
-    altFltSlider.value=S.altFilter; altFltVal.textContent=S.altFilter>=999?'FL999+':'FL'+S.altFilter;
+    altMinSlider.value=S.minAlt; altMinVal.textContent='FL'+S.minAlt;
+    altMaxSlider.value=S.maxAlt; altMaxVal.textContent=S.maxAlt>=999?'FL999+':'FL'+S.maxAlt;
     minSpdSlider.value=S.minSpd; minSpdVal.textContent=S.minSpd+' KT';
     sqkFilter.value=S.sqkFilter||'';
     fontFamily.value=S.fontFamily; fontSizeSlider.value=S.fontSize; fontSizeVal.textContent=S.fontSize;
