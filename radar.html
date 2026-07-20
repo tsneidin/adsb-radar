@@ -46,6 +46,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #pause-btn{position:absolute;bottom:10px;left:10px;z-index:5;width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg2) 75%,transparent);border:1px solid var(--border2);border-radius:3px;cursor:pointer;font-size:14px;color:var(--fg3);user-select:none}
 #pause-btn:hover{border-color:var(--fg);color:var(--fg)}
 #pause-btn.active{border-color:var(--fg);color:var(--fg);background:color-mix(in srgb,var(--bg) 85%,transparent)}
+#perf-overlay{position:absolute;bottom:40px;left:10px;z-index:5;background:color-mix(in srgb,var(--bg) 85%,transparent);border:1px solid var(--border2);border-radius:3px;padding:6px 8px;font-family:monospace;font-size:10px;line-height:1.6;color:var(--fg-muted);display:none;pointer-events:none;white-space:pre}
+#perf-overlay.show{display:block}
 #hud{position:absolute;top:10px;left:12px;font-size:13px;line-height:1.7;pointer-events:none;text-shadow:0 0 3px rgba(0,0,0,0.4);z-index:2}
 #hud span{display:block}
 #sidebar{width:350px;height:100%;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;padding:12px 14px;gap:8px;overflow-y:scroll;scrollbar-width:thin;scrollbar-color:var(--border3) transparent}
@@ -143,6 +145,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
   <div id="radar-wrap"><canvas id="c"></canvas><div id="hud"></div><div id="target-info"></div><div id="target-popup"></div>
     <div id="range-overlay"><div class="ro-hdr"><label>Zoom Range</label><span id="range-val">25 NM</span></div><input type="range" id="zoom-slider" min="15" max="100" step="5" value="25"></div>
     <div id="pause-btn" title="Pause / Resume">⏸</div>
+    <div id="perf-overlay"></div>
   </div>
   <div id="wx-popup"></div>
   <div id="font-popup" class="popup">
@@ -290,6 +293,13 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const bgCanvas = document.createElement('canvas');
 const bgCtx = bgCanvas.getContext('2d');
+const sceneCanvas = document.createElement('canvas');
+const sceneCtx = sceneCanvas.getContext('2d');
+let _needsRedraw = true;
+let _proxTick = 0;
+let _proxSet = new Set();
+let _visAirports = [];
+let _airportView = {lat:NaN,lng:NaN,range:NaN};
 const hudEl = document.getElementById('hud');
 const tgtList = document.getElementById('tgt-list');
 const tgtCount = document.getElementById('tgt-count');
@@ -380,6 +390,7 @@ async function loadAirports(){
     const res=await fetch('/api/airports');
     if(res.ok){
       S.airports=await res.json();
+      _airportView={lat:NaN,lng:NaN,range:NaN};
       console.log('airports loaded',S.airports.length);
     }
   }catch(e){console.error('airport load error',e)}
@@ -841,8 +852,9 @@ function drawGeoOverlay(c){
 }
 
 // ===== AIRCRAFT =====
+function vsiRate(a){return typeof a.baro_rate==='number'?a.baro_rate:(typeof a.geom_rate==='number'?a.geom_rate:0)}
 function mkAircraft(cs,lat,lon,alt,hdg,spd,src){
-  return{id:S.nextId++,callsign:cs,lat,lon,alt,hdg,spd,src,type:'',reg:'',squawk:'',lastLit:-DECAY_MS*2,history:[],spdHistory:[]};
+  return{id:S.nextId++,callsign:cs,lat,lon,alt,hdg,spd,src,type:'',reg:'',squawk:'',vsi:0,lastLit:-DECAY_MS*2,history:[],spdHistory:[]};
 }
 function aircraftBearing(ac){
   const h=ac.history;
@@ -880,7 +892,7 @@ function processAircraft(list){
       if(!cs||/^[A-F0-9]{6}$/.test(cs)) cs=a.t||'---';
       ac=mkAircraft(cs,a.lat,a.lon,Math.round(al),Math.round(a.track||0),Math.round(a.gs||0),'live');
       ac.hex=hex; ac.lastSeen=now; ac.spotted=1;
-      ac.type=a.t||''; ac.reg=a.r||''; ac.squawk=a.squawk||'';
+      ac.type=a.t||''; ac.reg=a.r||''; ac.squawk=a.squawk||''; ac.vsi=vsiRate(a);
       S.aircraft.push(ac);
     }else{
       if(Math.abs(ac.lat-a.lat)>1e-6||Math.abs(ac.lon-a.lon)>1e-6){
@@ -889,7 +901,7 @@ function processAircraft(list){
       }
       ac.lat=a.lat; ac.lon=a.lon;
       ac.alt=Math.round(typeof a.alt_baro==='number'?a.alt_baro:(a.alt_geom||35000));
-      ac.hdg=Math.round(a.track||0); ac.spd=Math.round(a.gs||0);
+      ac.hdg=Math.round(a.track||0); ac.spd=Math.round(a.gs||0); ac.vsi=vsiRate(a);
       ac.spdHistory.push(ac.spd); if(ac.spdHistory.length>6) ac.spdHistory.shift();
       ac.lastSeen=now; ac.spotted=(ac.spotted||0)+1;
       ac.type=a.t||ac.type; ac.reg=a.r||ac.reg; ac.squawk=a.squawk||ac.squawk||'';
@@ -897,6 +909,7 @@ function processAircraft(list){
       if(ncs&&!/^[A-F0-9]{6}$/.test(ncs)) ac.callsign=ncs;
     }
   }
+  _needsRedraw=true;
 }
 
 async function fetchLiveData(){
@@ -950,11 +963,11 @@ function setCenter(q){
     if(found) ap=found, q=found.icao;
   }
   if(!ap) return;
-  S.centerLat=ap.lat; S.centerLng=ap.lon;
+  S.centerLat=ap.lat; S.centerLng=ap.lon; _viewKey++;
   S.currentAirport=q;
   centerLabel.textContent=q+(ap.state?' · '+ap.name+', '+ap.state:' · '+ap.name);
   aptInput.value=q;
-  S.bgDirty=true;
+  S.bgDirty=true;_needsRedraw=true;
   S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,2000);
   loadMapTiles();
   autoShowLiveAtc();
@@ -972,8 +985,9 @@ function resize(){
   const w=r.width,h=r.height;
   canvas.width=w*S.dpr; canvas.height=h*S.dpr;
   canvas.style.width=w+'px'; canvas.style.height=h+'px';
-  S.w=w;S.h=h;S.cx=w/2;S.cy=h/2;S.rad=Math.min(w,h)/2-16;
+  S.w=w;S.h=h;S.cx=w/2;S.cy=h/2;S.rad=Math.min(w,h)/2-16; _viewKey++;
   S.bgDirty=true;
+  _needsRedraw=true;
 }
 
 function drawBg(){
@@ -981,6 +995,10 @@ function drawBg(){
   bgCanvas.width=canvas.width;
   bgCanvas.height=canvas.height;
   bgCtx.setTransform(S.dpr,0,0,S.dpr,0,0);
+  sceneCanvas.width=canvas.width;
+  sceneCanvas.height=canvas.height;
+  sceneCtx.setTransform(S.dpr,0,0,S.dpr,0,0);
+  _needsRedraw=true;
   bgCtx.fillStyle=TC.bg;
   bgCtx.fillRect(0,0,w,h);
   bgCtx.save();
@@ -1038,7 +1056,205 @@ function drawBg(){
   bgCtx.restore();
 }
 
+function drawScene(c, ts){
+  const{w,h,cx,cy,rad,mr}=S;
+  c.save();
+  c.clearRect(0,0,w,h);
+  c.beginPath();
+  c.arc(cx,cy,rad+2,0,Math.PI*2);
+  c.clip();
+
+  // Proximity detection — O(n²), throttle to every 4th scene draw
+  if(++_proxTick%4===0||_needsRedraw){
+    const pn=S.proxNm, pf=S.proxFt;
+    _proxSet.clear();
+    for(let i=0;i<S.aircraft.length;i++){
+      for(let j=i+1;j<S.aircraft.length;j++){
+        const a=S.aircraft[i], b=S.aircraft[j];
+        const d=distNm(a.lat,a.lon,b.lat,b.lon);
+        if(d>pn*2||Math.abs(a.alt-b.alt)>pf) continue;
+        const n=Math.min(a.history.length,b.history.length,6);
+        if(n<2){if(d<=pn){_proxSet.add(a);_proxSet.add(b)};continue}
+        let sum=0, cnt=0;
+        for(let k=0;k<=n;k++){
+          const idx=n-k;
+          const hd=k===0?d:distNm(a.history[idx].lat,a.history[idx].lon,b.history[idx].lat,b.history[idx].lon);
+          sum+=hd; cnt++;
+        }
+        const avg=sum/cnt;
+        if(d<avg*0.92&&d<pn){_proxSet.add(a);_proxSet.add(b)}
+      }
+    }
+  }
+
+  // Scene draws at 30fps; render all details each scene draw
+  const _detail=true;
+
+  // Detailed trail/heading (every 2nd frame); pos already cached in render()
+  for(const ac of S.aircraft){
+    if(!_detail) continue;
+    const pos=ac._pos, sel=ac===S.selected;
+    const noTrail=!S.showTrails&&!sel;
+
+    // Trail
+    const drawTrail=!noTrail&&(sel||(ts-ac.lastSeen<60000&&ac.history.length>=2));
+    if(drawTrail&&!(ac.alt>S.maxAlt*100||ac.alt<S.minAlt*100)&&pos.dist<=mr*1.05){
+      const al=sel?1:Math.max(0.2,1-(ts-ac.lastSeen)/60000);
+      const prox=_proxSet.has(ac);
+      let px=pos.x, py=pos.y;
+      c.save();
+      if(sel){c.shadowColor=TC.shadowSel;c.shadowBlur=10}
+      for(let i=ac.history.length-1;i>=0;i--){
+        const h=ac.history[i];
+        const hp=h._vk===_viewKey?h._pos:(h._vk=_viewKey,h._pos=toScreen(h.lat,h.lon));
+        if(hp.dist>mr) continue;
+        const t=i===ac.history.length-1?al:(i/ac.history.length)*al;
+        c.globalAlpha=Math.max(0.03,Math.max(0.05,t));
+        c.strokeStyle=prox?TC.fgProx:sel?TC.fgSel:TC.fg;
+        c.lineWidth=sel?3:prox?2.5:2;
+        c.beginPath();c.moveTo(px,py);c.lineTo(hp.x,hp.y);c.stroke();
+        c.beginPath();c.arc(hp.x,hp.y,sel?2.5:1.5,0,Math.PI*2);c.fill();
+        px=hp.x;py=hp.y;
+      }
+      c.restore();
+    }
+
+    // Heading line
+    const drawHdg=!noTrail&&ac.hdg!=null;
+    if(drawHdg&&(sel||(ts-ac.lastLit)/DECAY_MS<3.5)&&!(ac.alt>S.maxAlt*100||ac.alt<S.minAlt*100)&&pos.dist<=mr){
+      const hdgLen=Math.min(rad*0.9,(avgSpd(ac)/30)*(rad/S.maxRange));
+      if(hdgLen>=6){
+        const aH=toRad(ac.hdg)-Math.PI/2, ex=pos.x+hdgLen*Math.cos(aH), ey=pos.y+hdgLen*Math.sin(aH);
+        c.save();
+        c.globalAlpha=sel?0.9:0.35;
+        c.strokeStyle=sel?TC.light3:TC.dim12;
+        c.lineWidth=sel?1.2:0.6;
+        c.setLineDash([3,4]);
+        c.beginPath();c.moveTo(pos.x,pos.y);c.lineTo(ex,ey);
+        c.stroke();c.setLineDash([]);
+        c.restore();
+      }
+    }
+  }
+
+  // Airports — cached viewport filter, rebuilt only when center/range changes
+  const rng=S.maxRange;
+  if(S.showAirports){
+    if(S.centerLat!==_airportView.lat||S.centerLng!==_airportView.lng||rng!==_airportView.range){
+      _airportView={lat:S.centerLat,lng:S.centerLng,range:rng};
+      _visAirports=[];
+      for(const ap of S.airports){
+        const d=distNm(S.centerLat,S.centerLng,ap.lat,ap.lon);
+        if(d<=rng) _visAirports.push({ap,d});
+      }
+    }
+    for(const entry of _visAirports){
+      const ap=entry.ap, ad=entry.d;
+      const b=bearing(S.centerLat,S.centerLng,ap.lat,ap.lon);
+      const r=(ad/mr)*rad, a=toRad(b-90);
+      const p={x:S.cx+r*Math.cos(a),y:S.cy+r*Math.sin(a),dist:ad};
+      const _met=S.wxCache[ap.wxId||ap.icao]?.metar;
+      if(!_met) continue;
+      const wx=S.wxCache[ap.wxId||ap.icao]||{};
+      const fc=wx.fltCat||'';
+      const fcColor=fc==='VFR'?'#00cc00':fc==='MVFR'?'#4488ff':fc==='IFR'?'#ff4444':fc==='LIFR'?'#ff44ff':'';
+      c.save();
+      c.strokeStyle=fcColor||TC.dim9; c.lineWidth=0.7;
+      c.beginPath(); c.arc(p.x,p.y,4,0,Math.PI*2); c.stroke();
+      c.fillStyle=fcColor||TC.dim8; c.beginPath(); c.arc(p.x,p.y,1.5,0,Math.PI*2); c.fill();
+      c.fillStyle=fcColor||TC.dim13;
+      c.font=S.fontStyle+' 9px '+S.fontFamily;
+      c.textAlign='left'; c.textBaseline='bottom';
+      c.fillText(ap.icao,p.x+5,p.y-2);
+      c.restore();
+    }
+  }
+
+  // Blips (foreground, separate pass so blips sit above trails/heading)
+  const labelQueue=[];
+  for(const ac of S.aircraft){
+    const pos=ac._pos;
+    if(pos.dist>mr) continue;
+    const prox=_proxSet.has(ac);
+    const sel=ac===S.selected;
+    const age=sel?0:(ts-ac.lastLit)/DECAY_MS;
+    if(!sel&&age>3.5) continue;
+    if(ac.alt>S.maxAlt*100||ac.alt<S.minAlt*100) continue;
+    if(ac.spd<S.minSpd) continue;
+    if(S.sqkFilter){const m=x=>x&&x.toUpperCase().includes(S.sqkFilter);if(!m(ac.squawk)&&!m(ac.reg)&&!m(ac.callsign)&&!m(ac.type)) continue}
+    const al=sel?1:Math.max(0.2,1-age);
+    const sz=sel?6:age<0.08?4.5:age<0.3?3.5:2.5;
+    c.save();
+    c.shadowColor=prox?TC.shadowProx:TC.shadow;
+    c.shadowBlur=sel?24:prox?18:age<0.08?22:10;
+    c.fillStyle=prox?TC.prox:sel?TC.shadowSel:TC.fg;
+    const bearing=aircraftBearing(ac);
+    c.globalAlpha=(sel?1:Math.min(1,al*1.2));
+    if(bearing!=null){
+      const aT=Math.PI/180*(bearing-90);
+      c.translate(pos.x,pos.y);
+      c.rotate(aT);
+      c.beginPath();
+      c.moveTo(sz*1.1,0);c.lineTo(-sz*0.7,-sz*0.7);c.lineTo(-sz*0.3,0);c.lineTo(-sz*0.7,sz*0.7);
+      c.closePath();c.fill();
+    }else{
+      c.fillRect(pos.x-sz/2,pos.y-sz/2,sz,sz);
+    }
+    c.restore();
+    if(S.labelMode===2?(sel||al>0.15):S.labelMode===1?(sel||al>0.15):sel) labelQueue.push({ac,pos,sel,al,prox});
+  }
+  if(labelQueue.length&&_detail){
+    scopeFont(c);
+    c.textAlign='left';c.textBaseline='top';
+    labelQueue.sort((a,b)=>b.sel-a.sel);
+    const placed=[];
+    const candidates=[
+      {dx:34,dy:-20},{dx:-34,dy:-20},{dx:34,dy:8},{dx:-34,dy:8},
+      {dx:34,dy:-4},{dx:-34,dy:-4},{dx:0,dy:-32},{dx:0,dy:16},
+    ];
+    for(const ld of labelQueue){
+      const{ac,pos,sel,al,prox}=ld;
+      const cw=ac.callsign.length*8;
+      const shortMode=S.labelMode===1;
+      const lw=shortMode?cw+6:Math.max(cw,altStr(ac.alt).length*8,(Math.round(ac.spd)+'KT').length*8)+6;
+      const lh=shortMode?17:43;
+      let lx=pos.x+26, ly=pos.y-20;
+      for(const co of candidates){
+        const cx=Math.max(8,Math.min(w-lw-8,pos.x+co.dx));
+        const cy=Math.max(8,Math.min(h-lh-8,pos.y+co.dy));
+        let clash=false;
+        for(const p of placed){
+          if(cx<p.x+p.w&&cx+lw>p.x&&cy<p.y+p.h&&cy+lh>p.y){clash=true;break}
+        }
+        if(!clash){lx=cx;ly=cy;break}
+      }
+      placed.push({x:lx,y:ly,w:lw,h:lh});
+      c.save();
+      c.globalAlpha=(sel?1:Math.min(1,al*1.8));
+      c.strokeStyle=prox?TC.prox3:TC.dim7;c.lineWidth=0.7;
+      c.setLineDash([2,3]);
+      c.beginPath();c.moveTo(pos.x,pos.y);c.lineTo(lx+3,ly+lh/2);
+      c.stroke();c.setLineDash([]);
+      c.fillStyle=prox?TC.prox2:sel?TC.light4:TC.dim13;
+      c.fillText(ac.callsign,lx+3,ly);
+      if(!shortMode){
+        c.fillStyle=prox?TC.prox4:sel?TC.light3:TC.dim11;
+        c.fillText(altStr(ac.alt),lx+3,ly+15);
+        c.fillText(Math.round(ac.spd)+'KT',lx+3,ly+29);
+      }
+      c.restore();
+    }
+  }
+
+  // Keep ac._pos for updList reuse; will be overwritten next scene draw
+
+  c.restore();
+}
+
 function render(ts){
+  const _r0=_perfShow?performance.now():0;
+  // Cache screen positions for all aircraft every frame
+  for(const ac of S.aircraft) ac._pos=toScreen(ac.lat,ac.lon);
   if(!S.paused){
     const dt=S.lastFrame?(ts-S.lastFrame)/1000:1/60;
     S.lastFrame=ts;
@@ -1046,7 +1262,7 @@ function render(ts){
     if(!S.fetching&&ts-S.lastFetch>API_INTERVAL) fetchData();
     const sr=toRad(S.sweepDeg), br=toRad(BEAM_DEG);
     for(const ac of S.aircraft){
-      const b=toRad(bearing(S.centerLat,S.centerLng,ac.lat,ac.lon));
+      const b=toRad(ac._pos.bearing);
       let d=b-sr; if(d>Math.PI) d-=2*Math.PI; if(d<-Math.PI) d+=2*Math.PI;
       if(Math.abs(d)<br) ac.lastLit=ts;
     }
@@ -1054,8 +1270,34 @@ function render(ts){
 
   const{w,h,cx,cy,rad,mr}=S;
 
+  if(_perfShow){
+    if(_perfFrameTs){
+      _perfFpsSamples.push(1000/(ts-_perfFrameTs));
+      if(_perfFpsSamples.length>30) _perfFpsSamples.shift();
+      _perfFps=_perfFpsSamples.reduce((a,b)=>a+b,0)/_perfFpsSamples.length;
+    }
+    _perfFrameTs=ts;
+  }
   if(S.bgDirty){drawBg();S.bgDirty=false}
 
+  // Redraw scene at 30fps (pos already cached at 60fps by render loop)
+  if(++_frame%2===0||_needsRedraw){
+    _needsRedraw=false;
+    const _d0=_perfShow?performance.now():0;
+    drawScene(sceneCtx, ts);
+    if(_perfShow){
+      _perfDrawMs=performance.now()-_d0;
+      _perfSceneSamples.push(performance.now());
+      if(_perfSceneSamples.length>30) _perfSceneSamples.shift();
+    }
+  }
+  if(_frame%4===0){
+    const _l0=_perfShow?performance.now():0;
+    updList();
+    if(_perfShow) _perfListMs=performance.now()-_l0;
+  }
+
+  // Compose final frame: background → cached scene → sweep overlay
   ctx.setTransform(S.dpr,0,0,S.dpr,0,0);
   ctx.clearRect(0,0,w,h);
   ctx.drawImage(bgCanvas,0,0,w,h);
@@ -1063,56 +1305,7 @@ function render(ts){
   ctx.beginPath();
   ctx.arc(cx,cy,rad+2,0,Math.PI*2);
   ctx.clip();
-
-  // Proximity detection — converging pairs within S.proxNm, ±S.proxFt
-  const proxSet=new Set();
-  const pn=S.proxNm, pf=S.proxFt;
-  for(let i=0;i<S.aircraft.length;i++){
-    for(let j=i+1;j<S.aircraft.length;j++){
-      const a=S.aircraft[i], b=S.aircraft[j];
-      const d=distNm(a.lat,a.lon,b.lat,b.lon);
-      if(d>pn*2||Math.abs(a.alt-b.alt)>pf) continue;
-      const n=Math.min(a.history.length,b.history.length,6);
-      if(n<2){if(d<=pn){proxSet.add(a);proxSet.add(b)};continue}
-      let sum=0, cnt=0;
-      for(let k=0;k<=n;k++){
-        const idx=n-k;
-        const hd=k===0?d:distNm(a.history[idx].lat,a.history[idx].lon,b.history[idx].lat,b.history[idx].lon);
-        sum+=hd; cnt++;
-      }
-      const avg=sum/cnt;
-      if(d<avg*0.92&&d<pn){proxSet.add(a);proxSet.add(b)}
-    }
-  }
-
-  // Trails — visible while data is fresh (60s), independent of sweep
-  if(S.showTrails||S.selected) for(const ac of S.aircraft){
-    const prox=proxSet.has(ac);
-    const sel=ac===S.selected;
-    if(!sel&&!S.showTrails) continue;
-    const fresh=ts-ac.lastSeen<60000;
-    if(!sel&&(!fresh||ac.history.length<2)) continue;
-    if(ac.alt>S.maxAlt*100||ac.alt<S.minAlt*100) continue;
-    const pos=toScreen(ac.lat,ac.lon);
-    if(pos.dist>mr*1.05) continue;
-    const al=sel?1:Math.max(0.2,1-(ts-ac.lastSeen)/60000);
-    let px=pos.x, py=pos.y;
-    ctx.save();
-    if(sel) ctx.shadowColor=TC.shadowSel;
-    if(sel) ctx.shadowBlur=10;
-    for(let i=ac.history.length-1;i>=0;i--){
-      const hp=toScreen(ac.history[i].lat,ac.history[i].lon);
-      if(hp.dist>mr) continue;
-      const t=i===ac.history.length-1?al:(i/ac.history.length)*al;
-      ctx.globalAlpha=Math.max(0.03,Math.max(0.05,t));
-      ctx.strokeStyle=prox?TC.fgProx:sel?TC.fgSel:TC.fg;
-      ctx.lineWidth=sel?3:prox?2.5:2;
-      ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(hp.x,hp.y);ctx.stroke();
-      ctx.beginPath();ctx.arc(hp.x,hp.y,sel?2.5:1.5,0,Math.PI*2);ctx.fill();
-      px=hp.x;py=hp.y;
-    }
-    ctx.restore();
-  }
+  ctx.drawImage(sceneCanvas,0,0,w,h);
 
   // Sweep beam
   {
@@ -1148,146 +1341,41 @@ function render(ts){
     ctx.fill();ctx.restore();
   }
 
-  // Airports
-  if(S.showAirports){
-    for(const ap of S.airports){
-      const p=toScreen(ap.lat,ap.lon);
-      if(p.dist>S.maxRange) continue;
-      const _met=S.wxCache[ap.wxId||ap.icao]?.metar;
-      if(!_met){
-        if(!_wxFetching.has(ap.wxId||ap.icao)) fetchWx(ap);
-        continue;
-      }
-      const wx=S.wxCache[ap.wxId||ap.icao]||{};
-      const fc=wx.fltCat||'';
-      const fcColor=fc==='VFR'?'#00cc00':fc==='MVFR'?'#4488ff':fc==='IFR'?'#ff4444':fc==='LIFR'?'#ff44ff':'';
-      ctx.save();
-      ctx.strokeStyle=fcColor||TC.dim9; ctx.lineWidth=0.7;
-      ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.stroke();
-      ctx.fillStyle=fcColor||TC.dim8; ctx.beginPath(); ctx.arc(p.x,p.y,1.5,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle=fcColor||TC.dim13;
-      ctx.font=S.fontStyle+' 9px '+S.fontFamily;
-      ctx.textAlign='left'; ctx.textBaseline='bottom';
-      ctx.fillText(ap.icao,p.x+5,p.y-2);
-      ctx.restore();
-    }
-  }
-
-  // Heading lines
-  if(S.showTrails||S.selected) for(const ac of S.aircraft){
-    const sel=ac===S.selected;
-    if(!sel&&!S.showTrails) continue;
-    const age=sel?0:(ts-ac.lastLit)/DECAY_MS;
-    if(!sel&&age>3.5) continue;
-    if(ac.hdg==null) continue;
-    if(ac.alt>S.maxAlt*100||ac.alt<S.minAlt*100) continue;
-    const pos=toScreen(ac.lat,ac.lon);
-    if(pos.dist>mr) continue;
-    const hdgLen=Math.min(rad*0.9, (avgSpd(ac)/30)*(rad/S.maxRange));
-    if(hdgLen<6) continue;
-    const aH=toRad(ac.hdg)-Math.PI/2;
-    const ex=pos.x+hdgLen*Math.cos(aH), ey=pos.y+hdgLen*Math.sin(aH);
-    ctx.save();
-    ctx.globalAlpha=sel?0.9:0.35;
-    ctx.strokeStyle=sel?TC.light3:TC.dim12;
-    ctx.lineWidth=sel?1.2:0.6;
-    ctx.setLineDash([3,4]);
-    ctx.beginPath();ctx.moveTo(pos.x,pos.y);ctx.lineTo(ex,ey);
-    ctx.stroke();ctx.setLineDash([]);
-    ctx.restore();
-  }
-
-  // Blips + labels with collision avoidance
-  const labelQueue=[];
-  for(const ac of S.aircraft){
-    const prox=proxSet.has(ac);
-    const sel=ac===S.selected;
-    const age=sel?0:(ts-ac.lastLit)/DECAY_MS;
-    if(!sel&&age>3.5) continue;
-    if(ac.alt>S.maxAlt*100||ac.alt<S.minAlt*100) continue;
-    if(ac.spd<S.minSpd) continue;
-    if(S.sqkFilter){const m=x=>x&&x.toUpperCase().includes(S.sqkFilter);if(!m(ac.squawk)&&!m(ac.reg)&&!m(ac.callsign)&&!m(ac.type)) continue}
-    const pos=toScreen(ac.lat,ac.lon);
-    if(pos.dist>mr) continue;
-    const al=sel?1:Math.max(0.2,1-age);
-    const sz=sel?6:age<0.08?4.5:age<0.3?3.5:2.5;
-    ctx.save();
-    ctx.shadowColor=prox?TC.shadowProx:TC.shadow;
-    ctx.shadowBlur=sel?24:prox?18:age<0.08?22:10;
-    ctx.fillStyle=prox?TC.prox:sel?TC.shadowSel:TC.fg;
-    const bearing=aircraftBearing(ac);
-    ctx.globalAlpha=(sel?1:Math.min(1,al*1.2));
-    if(bearing!=null){
-      const aT=Math.PI/180*(bearing-90);
-      ctx.translate(pos.x,pos.y);
-      ctx.rotate(aT);
-      ctx.beginPath();
-      ctx.moveTo(sz*1.1,0);ctx.lineTo(-sz*0.7,-sz*0.7);ctx.lineTo(-sz*0.3,0);ctx.lineTo(-sz*0.7,sz*0.7);
-      ctx.closePath();ctx.fill();
-    }else{
-      ctx.fillRect(pos.x-sz/2,pos.y-sz/2,sz,sz);
-    }
-    ctx.restore();
-    if(S.labelMode===2?(sel||al>0.15):S.labelMode===1?(sel||al>0.15):sel) labelQueue.push({ac,pos,sel,al,prox});
-  }
-  if(labelQueue.length){
-    scopeFont(ctx);
-    ctx.textAlign='left';ctx.textBaseline='top';
-    labelQueue.sort((a,b)=>b.sel-a.sel);
-    const placed=[];
-    const candidates=[
-      {dx:34,dy:-20},{dx:-34,dy:-20},{dx:34,dy:8},{dx:-34,dy:8},
-      {dx:34,dy:-4},{dx:-34,dy:-4},{dx:0,dy:-32},{dx:0,dy:16},
-    ];
-    for(const ld of labelQueue){
-      const{ac,pos,sel,al,prox}=ld;
-      const cw=ctx.measureText(ac.callsign).width;
-      const shortMode=S.labelMode===1;
-      const lw=shortMode?cw+6:Math.max(cw,ctx.measureText(altStr(ac.alt)).width,ctx.measureText(Math.round(ac.spd)+'KT').width)+6;
-      const lh=shortMode?17:43;
-      let lx=pos.x+26, ly=pos.y-20;
-      for(const c of candidates){
-        const cx=Math.max(8,Math.min(w-lw-8,pos.x+c.dx));
-        const cy=Math.max(8,Math.min(h-lh-8,pos.y+c.dy));
-        let clash=false;
-        for(const p of placed){
-          if(cx<p.x+p.w&&cx+lw>p.x&&cy<p.y+p.h&&cy+lh>p.y){clash=true;break}
-        }
-        if(!clash){lx=cx;ly=cy;break}
-      }
-      placed.push({x:lx,y:ly,w:lw,h:lh});
-      ctx.save();
-      ctx.globalAlpha=(sel?1:Math.min(1,al*1.8));
-      ctx.strokeStyle=prox?TC.prox3:TC.dim7;ctx.lineWidth=0.7;
-      ctx.setLineDash([2,3]);
-      ctx.beginPath();ctx.moveTo(pos.x,pos.y);ctx.lineTo(lx+3,ly+lh/2);
-      ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle=prox?TC.prox2:sel?TC.light4:TC.dim13;
-      ctx.fillText(ac.callsign,lx+3,ly);
-      if(!shortMode){
-        ctx.fillStyle=prox?TC.prox4:sel?TC.light3:TC.dim11;
-        ctx.fillText(altStr(ac.alt),lx+3,ly+15);
-        ctx.fillText(Math.round(ac.spd)+'KT',lx+3,ly+29);
-      }
-      ctx.restore();
-    }
-  }
-
   ctx.restore();
 
   const now=new Date();
   const utcTime=now.toISOString().slice(11,19);
   const tz=tzForAirport(S.currentAirport);
   const localTime=now.toLocaleString('en-GB',{timeZone:tz,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  if(_perfShow) _perfRenderMs=performance.now()-_r0;
+
   hudEl.innerHTML=`<span>${localTime}LT</span><span>${utcTime}Z</span>`;
+
+  // Perf overlay update (~4Hz to avoid unnecessary DOM churn)
+  if(_perfShow&&_frame%16===0){
+    const aTotal=S.aircraft.length;
+    const aVis=S.aircraft.filter(a=>a._pos&&a._pos.dist<=mr).length;
+    // Scene FPS from drawScene call timestamps
+    let sfps=0;
+    if(_perfSceneSamples.length>1) sfps=(_perfSceneSamples.length-1)/((_perfSceneSamples[_perfSceneSamples.length-1]-_perfSceneSamples[0])/1000);
+    perfEl.innerHTML=[
+      `FPS: ${_perfFps.toFixed(1)} (scene ${sfps.toFixed(1)})`,
+      `Render: ${_perfRenderMs.toFixed(1)}ms`,
+      ` Draw: ${_perfDrawMs.toFixed(1)}ms`,
+      ` List: ${_perfListMs.toFixed(1)}ms`,
+      `Aircraft: ${aVis}/${aTotal}`,
+      `Airports: ${_visAirports.length}/${S.airports.length}`,
+      `Prox pairs: ${_proxSet.size}`
+    ].join('\n');
+  }
 }
 
 // ===== CONTROLS =====
 let zoomTimer;
 zoomSlider.addEventListener('input',()=>{
-  S.maxRange=S.mr=parseInt(zoomSlider.value);
+  S.maxRange=S.mr=parseInt(zoomSlider.value); _viewKey++;
   rangeVal.textContent=S.maxRange+' NM';
-  S.bgDirty=true;
+  S.bgDirty=true;_needsRedraw=true;
   clearTimeout(zoomTimer);
   zoomTimer=setTimeout(()=>{S.lastMetarFetch=0;_lastMetarAttempt=0;loadMapTiles();S.lastFetch=-10000;fetchData()},250);
   saveSettings();
@@ -1299,7 +1387,7 @@ function setMapSource(src){
   mapOsm.classList.toggle('on',src==='osm');
   mapNone.classList.toggle('on',src==='none');
   loadMapTiles();
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 }
 mapVfr.addEventListener('click',()=>setMapSource('vfr'));
 mapOsm.addEventListener('click',()=>setMapSource('osm'));
@@ -1309,7 +1397,7 @@ wxRadarToggle.addEventListener('click',()=>{
   wxRadarToggle.classList.toggle('on',S.showWxRadar);
   if(S.showWxRadar) loadWxRadarTiles();
   else S.bgDirty=true;
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 });
 
 document.querySelectorAll('[data-theme-btn]').forEach(btn=>{
@@ -1326,6 +1414,7 @@ const pauseBtn = document.getElementById('pause-btn');
 pauseBtn.addEventListener('click',()=>{
   S.paused=!S.paused;
   pauseBtn.classList.toggle('active',S.paused);
+  _needsRedraw=true;
   if(!S.paused){S.lastFrame=0;S.lastFetch=-10000;fetchData()}
 });
 
@@ -1342,26 +1431,26 @@ fontColorPicker.addEventListener('input',()=>{
   saveSettings();
 });
 
-fontFamily.addEventListener('change',()=>{S.fontFamily=fontFamily.value;S.bgDirty=true;saveSettings()});
+fontFamily.addEventListener('change',()=>{S.fontFamily=fontFamily.value;S.bgDirty=true;_needsRedraw=true;saveSettings()});
 
 fontSizeSlider.addEventListener('input',()=>{
   S.fontSize=parseInt(fontSizeSlider.value);
   fontSizeVal.textContent=S.fontSize;
-  S.bgDirty=true;
+  S.bgDirty=true;_needsRedraw=true;
   saveSettings();
 });
 
 fontStyleBtns.forEach(b=>b.addEventListener('click',()=>{
   fontStyleBtns.forEach(x=>x.classList.toggle('on',x===b));
   S.fontStyle=b.dataset.fontStyle;
-  S.bgDirty=true;
+  S.bgDirty=true;_needsRedraw=true;
   saveSettings();
 }));
 
 mapOpacitySlider.addEventListener('input',()=>{
   S.mapOpacity=parseInt(mapOpacitySlider.value)/100;
   mapOpacityVal.textContent=mapOpacitySlider.value+'%';
-  S.bgDirty=true;
+  S.bgDirty=true;_needsRedraw=true;
   saveSettings();
 });
 
@@ -1369,31 +1458,31 @@ altMinSlider.addEventListener('input',()=>{
   S.minAlt=parseInt(altMinSlider.value);
   altMinVal.textContent='FL'+S.minAlt;
   if(S.minAlt>S.maxAlt){S.maxAlt=S.minAlt;altMaxSlider.value=S.maxAlt;altMaxVal.textContent=S.maxAlt>=999?'FL999+':'FL'+S.maxAlt}
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 });
 altMaxSlider.addEventListener('input',()=>{
   S.maxAlt=parseInt(altMaxSlider.value);
   altMaxVal.textContent=S.maxAlt>=999?'FL999+':'FL'+S.maxAlt;
   if(S.maxAlt<S.minAlt){S.minAlt=S.maxAlt;altMinSlider.value=S.minAlt;altMinVal.textContent='FL'+S.minAlt}
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 });
 
 minSpdSlider.addEventListener('input',()=>{
   S.minSpd=parseInt(minSpdSlider.value);
   minSpdVal.textContent=S.minSpd+' KT';
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 });
 
 sqkFilter.addEventListener('input',()=>{
   S.sqkFilter=sqkFilter.value.trim().toUpperCase();
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 });
 
 airportToggle.addEventListener('click',()=>{
   S.showAirports=!S.showAirports;
   airportToggle.classList.toggle('on',S.showAirports);
   if(!S.showAirports){S.hoveredAirport=null;wxPopup.classList.remove('show')}
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 });
 
 const labelsToggle = document.getElementById('labels-toggle');
@@ -1401,14 +1490,14 @@ labelsToggle.addEventListener('click',()=>{
   S.labelMode=S.labelMode===2?1:S.labelMode===1?0:2;
   labelsToggle.textContent=S.labelMode===2?'Labels':S.labelMode===1?'Short':'Labels';
   labelsToggle.classList.toggle('on',S.labelMode!==0);
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 });
 
 const trailsToggle = document.getElementById('trails-toggle');
 trailsToggle.addEventListener('click',()=>{
   S.showTrails=!S.showTrails;
   trailsToggle.classList.toggle('on',S.showTrails);
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 });
 
 let scanningLiveAtc = false;
@@ -1417,12 +1506,12 @@ let scanningLiveAtc = false;
 proxNmSlider.addEventListener('input',()=>{
   S.proxNm=parseFloat(proxNmSlider.value);
   proxNmVal.textContent=S.proxNm+' NM';
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 });
 proxFtSlider.addEventListener('input',()=>{
   S.proxFt=parseInt(proxFtSlider.value);
   proxFtVal.textContent=S.proxFt+' FT';
-  saveSettings();
+  _needsRedraw=true;saveSettings();
 });
 
 // ===== TARGET LIST =====
@@ -1435,7 +1524,7 @@ function setTgtListHtml(html){
 }
 
 function updList(){
-  const s=S.aircraft.filter(a=>a&&a.lat!=null&&typeof a.lat=='number').map(a=>({a,dist:distNm(S.centerLat,S.centerLng,a.lat,a.lon)})).sort((a,b)=>a.dist-b.dist);
+  const s=S.aircraft.filter(a=>a&&a.lat!=null&&typeof a.lat=='number').map(a=>({a,dist:a._pos?a._pos.dist:distNm(S.centerLat,S.centerLng,a.lat,a.lon)})).sort((a,b)=>a.dist-b.dist);
   if(!s.length){setTgtListHtml('<div class="empty">NO TARGETS</div>');tgtCount.textContent='0';return}
   const v=s.filter(x=>{if(S.sqkFilter){const m=v=>v&&v.toUpperCase().includes(S.sqkFilter);if(!m(x.a.squawk)&&!m(x.a.reg)&&!m(x.a.callsign)&&!m(x.a.type)) return false}return x.dist<=S.maxRange&&x.a.spd>=S.minSpd&&!(x.a.alt>S.maxAlt*100||x.a.alt<S.minAlt*100)});
   tgtCount.textContent=v.length;
@@ -1492,6 +1581,7 @@ function showTargetInfo(ac){
     `<span class="l">Alt:</span> <span class="v">${altStr(ac.alt)}</span><br>`+
     `<span class="l">Spd:</span> <span class="v">${Math.round(ac.spd)} KT</span><br>`+
     `<span class="l">Hdg:</span> <span class="v">${Math.round(ac.hdg)}°</span><br>`+
+    (ac.vsi?`<span class="l">V/S:</span> <span class="v">${ac.vsi>0?'↑&nbsp;':'↓&nbsp;'}${Math.abs(Math.round(ac.vsi))} ft/min</span><br>`:'')+
     (ac.squawk?`<span class="l">Squawk:</span> <span class="v">${ac.squawk}</span><br>`:'');
   infoEl.classList.add('show');
 }
@@ -1577,7 +1667,7 @@ function movePan(e){
   const nmPerPx=S.maxRange/S.rad;
   const latPerNm=1/60;
   const lngPerNm=1/(60*Math.cos(toRad(S.centerLat)));
-  S.centerLat=pan.clat+dy*nmPerPx*latPerNm;
+  S.centerLat=pan.clat+dy*nmPerPx*latPerNm; _viewKey++;
   S.centerLng=pan.clng-dx*nmPerPx*lngPerNm;
   pan.moved=true;
   S.bgDirty=true;
@@ -1593,7 +1683,7 @@ function endPan(e){
   pan.wasMoved=pan.moved;
   if(pan.moved){
     S.lastMetarFetch=0;_lastMetarAttempt=0;
-    S.bgDirty=true;
+    S.bgDirty=true;_needsRedraw=true;
     loadMapTiles();
     S.fetching=false;S.aircraft=[];S.lastFetch=-10000;setTimeout(fetchData,500);
     saveSettings();
@@ -1613,10 +1703,10 @@ canvas.addEventListener('wheel',e=>{
   zoomThrottle=now;
   const step=e.deltaY>0?5:-5;
   const v=Math.max(15,Math.min(100,S.maxRange+step));
-  S.maxRange=S.mr=v;
+  S.maxRange=S.mr=v; _viewKey++;
   zoomSlider.value=v;
   rangeVal.textContent=v+' NM';
-  S.bgDirty=true;
+  S.bgDirty=true;_needsRedraw=true;
   S.lastMetarFetch=0;_lastMetarAttempt=0;
   loadMapTiles();S.lastFetch=-10000;fetchData();
   saveSettings();
@@ -1746,7 +1836,17 @@ function loadSettings(){
 
 // ===== MAIN =====
 let _frame=0;
-function loop(t){try{render(t)}catch(e){console.warn('render',e)};if(++_frame%2===0)updList();requestAnimationFrame(loop)}
+// Perf overlay state
+let _perfShow=false;
+let _perfFps=0, _perfFrameTs=0, _perfFpsSamples=[];
+let _perfSceneFps=0, _perfSceneTs=0, _perfSceneSamples=[];
+let _perfRenderMs=0, _perfDrawMs=0, _perfListMs=0;
+let _sweepGrad=null;
+let _viewKey=0; // increment on pan/zoom to invalidate history pos cache
+let _perfTotalAircraft=0, _perfVisAirports=0, _perfProxPairs=0;
+let perfEl;
+
+function loop(t){try{render(t)}catch(e){console.warn('render',e)};requestAnimationFrame(loop)}
 function init(){
   // load theme first so applyTheme uses the saved theme
   try{const r=localStorage.getItem('adsb-radar-settings');if(r){const o=JSON.parse(r);if(o.theme)S.theme=o.theme}}catch(e){}
@@ -1761,6 +1861,14 @@ function init(){
     if(ap){S.currentAirport=ap.icao;centerLabel.textContent=ap.icao+(ap.state?' · '+ap.name+', '+ap.state:' · '+ap.name);aptInput.value=ap.icao}
     else{centerLabel.textContent='';S.currentAirport=''}
   }
+  perfEl=document.getElementById('perf-overlay');
+  document.addEventListener('keydown',e=>{
+    if(e.key==='p'){
+      _perfShow=!_perfShow;
+      perfEl.classList.toggle('show',_perfShow);
+      if(!_perfShow){_perfFpsSamples=[];_perfFrameTs=0;_perfSceneSamples=[]}
+    }
+  });
   fetchData();
   loadMapTiles();
   fetchScopeWx();
